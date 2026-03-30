@@ -1,0 +1,28 @@
+{
+  "name": "goroom",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "app:add:android": "npx cap add android",
+    "app:add:ios": "npx cap add ios",
+    "app:sync": "npm run build && npx cap sync",
+    "app:open:android": "npx cap open android",
+    "app:open:ios": "npx cap open ios",
+    "desktop:dev": "NODE_ENV=development electron .",
+    "desktop:build": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "vite": "^5.0.0"
+  }
+}
