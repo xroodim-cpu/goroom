@@ -1,12 +1,57 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { supabase } from './supabase';
 
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
+const shortId = () => Math.random().toString(36).slice(2, 10);
 const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const fmtTime = ts => { const d = new Date(ts); return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 const DAYS = ['일','월','화','수','목','금','토'];
 const MO = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 const COLORS = ['#4A90D9','#F09819','#27AE60','#8E44AD','#E74C3C','#00B4D8','#E91E63','#009688','#795548','#607D8B'];
 
+const STORAGE_BUCKET = 'goroom';
+
+/* ── Supabase Storage Helpers ── */
+async function uploadFile(path, file) {
+  try {
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, { upsert: true });
+    if (error) throw error;
+    return getPublicUrl(path);
+  } catch (e) { console.error('uploadFile error:', e); return null; }
+}
+
+async function deleteFile(path) {
+  try {
+    const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+    if (error) throw error;
+  } catch (e) { console.error('deleteFile error:', e); }
+}
+
+async function deleteFolder(folder) {
+  try {
+    const { data } = await supabase.storage.from(STORAGE_BUCKET).list(folder);
+    if (data && data.length > 0) {
+      const paths = data.map(f => `${folder}/${f.name}`);
+      await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+    }
+  } catch (e) { console.error('deleteFolder error:', e); }
+}
+
+function getPublicUrl(path) {
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return data?.publicUrl || '';
+}
+
+async function fileToBlob(dataUrlOrFile) {
+  if (dataUrlOrFile instanceof File || dataUrlOrFile instanceof Blob) return dataUrlOrFile;
+  if (typeof dataUrlOrFile === 'string' && dataUrlOrFile.startsWith('data:')) {
+    const res = await fetch(dataUrlOrFile);
+    return await res.blob();
+  }
+  return null;
+}
+
+/* ── */
 function useBreakpoint() {
   const calc = () => window.innerWidth <= 480 ? 'mobile' : window.innerWidth <= 1024 ? 'tablet' : 'desktop';
   const [bp, setBp] = useState(calc);
@@ -48,33 +93,35 @@ const I = ({n, size=20, color}) => {
     camera:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>,
     list:<svg style={s} viewBox="0 0 24 24" {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
     grid:<svg style={s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
+    copy:<svg style={s} viewBox="0 0 24 24" {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
+    logout:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+    info:<svg style={s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
   };
   return icons[n] || null;
 };
 
-function Avatar({name,size=44,color}){
+function Avatar({name,size=44,color,src}){
+  if(src) return <div style={{width:size,height:size,borderRadius:size*.32,overflow:'hidden',flexShrink:0}}><img src={src} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>;
   const cs=['#4A90D9','#F09819','#27AE60','#8E44AD','#E74C3C','#00B4D8','#E91E63','#009688'];
   const bg=color||cs[Math.abs(name?.charCodeAt(0)||0)%cs.length];
   return <div style={{width:size,height:size,borderRadius:size*.32,background:bg,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:size*.4,fontWeight:700,flexShrink:0}}>{name?.charAt(0)||'?'}</div>;
 }
 function Toggle({on,toggle}){ return <button className={`gr-tsw ${on?'on':'off'}`} onClick={e=>{e.stopPropagation();toggle();}}/>; }
 
-const INIT_FRIENDS=[
-  {id:'f1',nickname:'누누리',statusMsg:'좋네',isPublic:true,birthday:'03-15',favorite:false,bio:'',profileImg:null,profileBg:null,updatedAt:Date.now()-3600000},
-  {id:'f2',nickname:'마이썬',statusMsg:'☀️💜',isPublic:true,birthday:'03-30',favorite:true,bio:'',profileImg:null,profileBg:null,updatedAt:Date.now()-86400000},
-  {id:'f3',nickname:'김지윤',statusMsg:'',isPublic:false,birthday:'12-25',favorite:false,bio:'',profileImg:null,profileBg:null,updatedAt:null},
-];
 const ALL_MENUS=[{id:'cal',icon:'cal',label:'캘린더'},{id:'memo',icon:'edit',label:'메모'},{id:'todo',icon:'check',label:'할일'},{id:'diary',icon:'book',label:'피드'},{id:'budget',icon:'wallet',label:'가계부'},{id:'alarm',icon:'bell',label:'알림'}];
 const DEF_SETTINGS = {
   schCats:[{id:'sc1',name:'업무',color:'#4A90D9'},{id:'sc2',name:'개인',color:'#F09819'},{id:'sc3',name:'건강',color:'#27AE60'},{id:'sc4',name:'공부',color:'#8E44AD'},{id:'sc5',name:'소셜',color:'#00B4D8'},{id:'sc6',name:'기타',color:'#95A5A6'}],
   expCats:[{id:'ec1',name:'식비'},{id:'ec2',name:'교통'},{id:'ec3',name:'쇼핑'},{id:'ec4',name:'의료'},{id:'ec5',name:'기타'}],
   incCats:[{id:'ic1',name:'급여'},{id:'ic2',name:'부수입'},{id:'ic3',name:'기타'}],
+  paymentMethods:[{id:'pm1',name:'신용카드',type:'card'},{id:'pm2',name:'계좌이체',type:'account'},{id:'pm3',name:'현금',type:'cash'}],
 };
-const INIT_ROOMS=[
-  {id:'r0',name:'내 캘린더',desc:'개인 일정',isPersonal:true,isPublic:true,members:['me'],newCount:0,nearestSchedule:null,menus:{cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]},
-  {id:'r1',name:'가족 캘린더',desc:'우리 가족 일정',isPersonal:false,isPublic:false,members:['me','f1','f2'],newCount:3,nearestSchedule:'4/2 아들 병원',menus:{cal:true,memo:true,todo:true,diary:false,budget:true,alarm:true},settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]},
-  {id:'r2',name:'ROODIM 업무',desc:'루딤 업무 스케줄',isPersonal:false,isPublic:false,members:['me','f3'],newCount:1,nearestSchedule:'4/1 미팅 14:00',menus:{cal:true,memo:true,todo:true,diary:false,budget:false,alarm:true},settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]},
-];
+
+/* ── Get or create user ID ── */
+function getUserId() {
+  let id = localStorage.getItem('goroom_user_id');
+  if (!id) { id = uid(); localStorage.setItem('goroom_user_id', id); }
+  return id;
+}
 
 export default function App(){
   const bp = useBreakpoint();
@@ -82,21 +129,407 @@ export default function App(){
   const [tab, setTab] = useState('friends');
   const [page, setPage] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [me, setMe] = useState({id:'me',nickname:'리',statusMsg:'👑박 + 👧이 = 👶도',linkCode:'goroom-me-001',bio:'',profileImg:null,profileBg:null,birthday:'01-01'});
-  const [friends, setFriends] = useState(INIT_FRIENDS);
-  const [rooms, setRooms] = useState(INIT_ROOMS);
+  const [loading, setLoading] = useState(true);
+
+  const userId = useMemo(() => getUserId(), []);
+
+  const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:''});
+  const [friends, setFriends] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [roomTab, setRoomTab] = useState('cal');
   const [subPage, setSubPage] = useState(null);
-
-  const openProfile = (id) => { setSelectedId(id); setPage(id==='me'?'profile':'friend-profile'); };
-  const openRoom = (id) => { setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
-  const goBack = () => { if(subPage){ setSubPage(null); } else { setPage(null); setSelectedId(null); setSchDetail(null); }};
-  const updateRoom = (rid,fn) => setRooms(p=>p.map(r=>r.id===rid?fn(r):r));
-
-  const toggleFav = (fid) => setFriends(p=>p.map(f=>f.id===fid?{...f,favorite:!f.favorite}:f));
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
   const [schDetail, setSchDetail] = useState(null);
+
+  /* ── Load data from Supabase on mount ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        // 1. Ensure user exists
+        const { data: existingUser } = await supabase.from('goroom_users').select('*').eq('id', userId).single();
+        if (existingUser) {
+          setMe({
+            id: existingUser.id,
+            nickname: existingUser.nickname || '나',
+            statusMsg: existingUser.status_msg || '',
+            linkCode: existingUser.link_code || '',
+            bio: '',
+            profileImg: existingUser.profile_img || null,
+            profileBg: existingUser.profile_bg || null,
+            birthday: existingUser.birthday || '',
+          });
+        } else {
+          const linkCode = 'goroom-' + shortId();
+          const newUser = { id: userId, nickname: '나', status_msg: '', profile_img: null, profile_bg: null, link_code: linkCode, birthday: '' };
+          await supabase.from('goroom_users').insert(newUser);
+          setMe(prev => ({ ...prev, linkCode }));
+        }
+
+        // 2. Load friends
+        const { data: friendRows } = await supabase.from('goroom_friends').select('*').eq('user_id', userId);
+        if (friendRows && friendRows.length > 0) {
+          const friendIds = friendRows.map(f => f.friend_id);
+          const { data: friendUsers } = await supabase.from('goroom_users').select('*').in('id', friendIds);
+          const friendMap = {};
+          (friendUsers || []).forEach(u => { friendMap[u.id] = u; });
+          setFriends(friendRows.map(fr => {
+            const u = friendMap[fr.friend_id] || {};
+            return {
+              id: fr.friend_id,
+              nickname: u.nickname || '?',
+              statusMsg: u.status_msg || '',
+              isPublic: true,
+              birthday: u.birthday || '',
+              favorite: fr.favorite || false,
+              bio: '',
+              profileImg: u.profile_img || null,
+              profileBg: u.profile_bg || null,
+              updatedAt: null,
+              _friendRowId: fr.id,
+            };
+          }));
+        }
+
+        // 3. Load rooms
+        const { data: memberRows } = await supabase.from('goroom_room_members').select('room_id, role').eq('user_id', userId);
+        const roomIds = (memberRows || []).map(m => m.room_id);
+
+        if (roomIds.length > 0) {
+          const { data: roomRows } = await supabase.from('goroom_rooms').select('*').in('id', roomIds);
+          const loadedRooms = [];
+          for (const r of (roomRows || [])) {
+            const { data: allMembers } = await supabase.from('goroom_room_members').select('user_id, role').eq('room_id', r.id);
+            const { data: schedules } = await supabase.from('goroom_schedules').select('*').eq('room_id', r.id);
+            const { data: memos } = await supabase.from('goroom_memos').select('*').eq('room_id', r.id);
+            const { data: todos } = await supabase.from('goroom_todos').select('*').eq('room_id', r.id);
+            const { data: diaries } = await supabase.from('goroom_diaries').select('*').eq('room_id', r.id);
+
+            loadedRooms.push({
+              id: r.id,
+              name: r.name,
+              desc: r.description || '',
+              isPersonal: r.is_personal || false,
+              isPublic: r.is_public !== false,
+              members: (allMembers || []).map(m => m.user_id),
+              newCount: 0,
+              nearestSchedule: null,
+              menus: r.menus || {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
+              settings: { ...DEF_SETTINGS, ...(r.settings || {}) },
+              schedules: (schedules || []).map(s => ({
+                id: s.id, title: s.title, date: s.date, time: s.time || '', memo: s.memo || '',
+                color: s.color || '#4A90D9', catId: s.cat_id || '', images: s.images || [],
+                createdAt: new Date(s.created_at || Date.now()).getTime(), createdBy: s.created_by,
+                todos: s.todos || [], dday: s.dday || false,
+                repeat: s.repeat || null, alarm: s.alarm || null,
+                budget: s.budget || null,
+              })),
+              memos: (memos || []).map(m => ({
+                id: m.id, title: m.title, content: m.content || '', pinned: m.pinned || false,
+                createdAt: new Date(m.created_at || Date.now()).getTime(), createdBy: m.created_by,
+              })),
+              todos: (todos || []).map(t => ({
+                id: t.id, text: t.text, done: t.done || false,
+                createdAt: new Date(t.created_at || Date.now()).getTime(), createdBy: t.created_by,
+                doneAt: t.done_at ? new Date(t.done_at).getTime() : null, doneBy: t.done_by || null,
+              })),
+              diaries: (diaries || []).map(d => ({
+                id: d.id, title: d.content ? '' : '', content: d.content || '', mood: d.mood || '', weather: d.weather || '',
+                images: d.images || [], likes: d.likes || [], comments: d.comments || [],
+                date: fmt(new Date(d.created_at || Date.now())),
+                createdAt: new Date(d.created_at || Date.now()).getTime(), createdBy: d.created_by,
+              })),
+            });
+          }
+          setRooms(loadedRooms);
+        } else {
+          // No rooms — create default personal room
+          const roomId = uid();
+          await supabase.from('goroom_rooms').insert({
+            id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정',
+            is_personal: true, is_public: true,
+            menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
+            settings: DEF_SETTINGS,
+          });
+          await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' });
+          setRooms([{
+            id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true,
+            members: [userId], newCount: 0, nearestSchedule: null,
+            menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
+            settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [],
+          }]);
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [userId]);
+
+  const openProfile = (id) => { setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
+  const openRoom = (id) => { setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
+  const goBack = () => { if(subPage){ setSubPage(null); } else { setPage(null); setSelectedId(null); setSchDetail(null); }};
+
+  const updateRoom = useCallback((rid, fn) => setRooms(p => p.map(r => r.id === rid ? fn(r) : r)), []);
+
+  const toggleFav = async (fid) => {
+    const f = friends.find(x => x.id === fid);
+    if (!f) return;
+    const newFav = !f.favorite;
+    setFriends(p => p.map(x => x.id === fid ? { ...x, favorite: newFav } : x));
+    try {
+      await supabase.from('goroom_friends').update({ favorite: newFav }).eq('id', f._friendRowId);
+    } catch (e) { console.error('toggleFav error:', e); }
+  };
+
+  const getName = useCallback((id) => {
+    if (id === userId) return me.nickname || '나';
+    const f = friends.find(x => x.id === id);
+    return f?.nickname || '?';
+  }, [userId, me.nickname, friends]);
+
+  /* ── Profile save ── */
+  const saveProfile = async (updatedMe) => {
+    try {
+      let profileImgUrl = updatedMe.profileImg;
+      let profileBgUrl = updatedMe.profileBg;
+
+      // Upload profile image if it's base64
+      if (updatedMe.profileImg && updatedMe.profileImg.startsWith('data:')) {
+        // Delete old profile images
+        try {
+          const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`user/${userId}`, { search: 'profile_' });
+          if (oldFiles && oldFiles.length > 0) {
+            await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(f => `user/${userId}/${f.name}`));
+          }
+        } catch(e) {}
+        const blob = await fileToBlob(updatedMe.profileImg);
+        if (blob) {
+          const path = `user/${userId}/profile_${Date.now()}.jpg`;
+          profileImgUrl = await uploadFile(path, blob);
+        }
+      }
+
+      // Upload background image if it's base64
+      if (updatedMe.profileBg && updatedMe.profileBg.startsWith('data:')) {
+        try {
+          const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`user/${userId}`, { search: 'bg_' });
+          if (oldFiles && oldFiles.length > 0) {
+            await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(f => `user/${userId}/${f.name}`));
+          }
+        } catch(e) {}
+        const blob = await fileToBlob(updatedMe.profileBg);
+        if (blob) {
+          const path = `user/${userId}/bg_${Date.now()}.jpg`;
+          profileBgUrl = await uploadFile(path, blob);
+        }
+      }
+
+      await supabase.from('goroom_users').update({
+        nickname: updatedMe.nickname,
+        status_msg: updatedMe.statusMsg,
+        profile_img: profileImgUrl,
+        profile_bg: profileBgUrl,
+        birthday: updatedMe.birthday,
+      }).eq('id', userId);
+
+      setMe(prev => ({ ...prev, ...updatedMe, profileImg: profileImgUrl, profileBg: profileBgUrl }));
+    } catch (e) {
+      console.error('saveProfile error:', e);
+    }
+  };
+
+  /* ── Room CRUD helpers (Supabase-backed) ── */
+  const saveSchedule = async (roomId, sch) => {
+    // Upload images
+    const imageUrls = [];
+    for (let i = 0; i < (sch.images || []).length; i++) {
+      const img = sch.images[i];
+      if (img && img.startsWith('data:')) {
+        const blob = await fileToBlob(img);
+        if (blob) {
+          const path = `calendar/${roomId}/sch_${sch.id}_${i}_${Date.now()}.jpg`;
+          const url = await uploadFile(path, blob);
+          if (url) imageUrls.push(url);
+        }
+      } else if (img) {
+        imageUrls.push(img);
+      }
+    }
+
+    const row = {
+      id: sch.id, room_id: roomId, created_by: userId,
+      title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
+      cat_id: sch.catId || null, memo: sch.memo || null,
+      dday: sch.dday || false, repeat: sch.repeat || null,
+      alarm: sch.alarm || null, budget: sch.budget || null,
+      todos: sch.todos || [], images: imageUrls,
+    };
+    try {
+      await supabase.from('goroom_schedules').insert(row);
+    } catch (e) { console.error('saveSchedule error:', e); }
+
+    return { ...sch, images: imageUrls };
+  };
+
+  const deleteSchedule = async (roomId, schId, images) => {
+    try {
+      // Delete images from storage
+      if (images && images.length > 0) {
+        for (const imgUrl of images) {
+          const path = imgUrl.split('/storage/v1/object/public/goroom/')[1];
+          if (path) await deleteFile(path);
+        }
+      }
+      await supabase.from('goroom_schedules').delete().eq('id', schId);
+    } catch (e) { console.error('deleteSchedule error:', e); }
+  };
+
+  const saveMemo = async (roomId, memo) => {
+    try {
+      await supabase.from('goroom_memos').insert({
+        id: memo.id, room_id: roomId, created_by: userId,
+        title: memo.title, content: memo.content, pinned: memo.pinned || false,
+      });
+    } catch (e) { console.error('saveMemo error:', e); }
+  };
+
+  const deleteMemo = async (memoId) => {
+    try { await supabase.from('goroom_memos').delete().eq('id', memoId); } catch (e) { console.error(e); }
+  };
+
+  const updateMemoPin = async (memoId, pinned) => {
+    try { await supabase.from('goroom_memos').update({ pinned }).eq('id', memoId); } catch (e) { console.error(e); }
+  };
+
+  const saveTodo = async (roomId, todo) => {
+    try {
+      await supabase.from('goroom_todos').insert({
+        id: todo.id, room_id: roomId, created_by: userId,
+        text: todo.text, done: false,
+      });
+    } catch (e) { console.error('saveTodo error:', e); }
+  };
+
+  const deleteTodo = async (todoId) => {
+    try { await supabase.from('goroom_todos').delete().eq('id', todoId); } catch (e) { console.error(e); }
+  };
+
+  const updateTodoDone = async (todoId, done) => {
+    try {
+      await supabase.from('goroom_todos').update({
+        done, done_by: done ? userId : null, done_at: done ? new Date().toISOString() : null,
+      }).eq('id', todoId);
+    } catch (e) { console.error(e); }
+  };
+
+  const saveDiary = async (roomId, diary) => {
+    const imageUrls = [];
+    for (let i = 0; i < (diary.images || []).length; i++) {
+      const img = diary.images[i];
+      if (img && img.startsWith('data:')) {
+        const blob = await fileToBlob(img);
+        if (blob) {
+          const path = `calendar/${roomId}/diary_${diary.id}_${i}_${Date.now()}.jpg`;
+          const url = await uploadFile(path, blob);
+          if (url) imageUrls.push(url);
+        }
+      } else if (img) {
+        imageUrls.push(img);
+      }
+    }
+    try {
+      await supabase.from('goroom_diaries').insert({
+        id: diary.id, room_id: roomId, created_by: userId,
+        content: diary.content || '', mood: diary.mood || null, weather: diary.weather || null,
+        images: imageUrls, likes: [], comments: [],
+      });
+    } catch (e) { console.error('saveDiary error:', e); }
+    return { ...diary, images: imageUrls };
+  };
+
+  const deleteDiary = async (diaryId, images) => {
+    try {
+      if (images && images.length > 0) {
+        for (const imgUrl of images) {
+          const path = imgUrl.split('/storage/v1/object/public/goroom/')[1];
+          if (path) await deleteFile(path);
+        }
+      }
+      await supabase.from('goroom_diaries').delete().eq('id', diaryId);
+    } catch (e) { console.error(e); }
+  };
+
+  const updateDiaryLikes = async (diaryId, likes) => {
+    try { await supabase.from('goroom_diaries').update({ likes }).eq('id', diaryId); } catch (e) { console.error(e); }
+  };
+
+  const updateDiaryComments = async (diaryId, comments) => {
+    try { await supabase.from('goroom_diaries').update({ comments }).eq('id', diaryId); } catch (e) { console.error(e); }
+  };
+
+  const updateRoomInDb = async (roomId, updates) => {
+    try { await supabase.from('goroom_rooms').update(updates).eq('id', roomId); } catch (e) { console.error(e); }
+  };
+
+  const createRoom = async (roomData) => {
+    const roomId = uid();
+    try {
+      await supabase.from('goroom_rooms').insert({
+        id: roomId, owner_id: userId, name: roomData.name, description: roomData.desc || '',
+        is_personal: false, is_public: roomData.isPublic,
+        menus: roomData.menus,
+        settings: DEF_SETTINGS,
+      });
+      // Add owner
+      await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' });
+      // Add other members
+      for (const memberId of (roomData.members || [])) {
+        if (memberId !== userId) {
+          await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: memberId, role: 'member' });
+        }
+      }
+    } catch (e) { console.error('createRoom error:', e); }
+    return roomId;
+  };
+
+  const deleteRoom = async (roomId) => {
+    try {
+      await supabase.from('goroom_schedules').delete().eq('room_id', roomId);
+      await supabase.from('goroom_memos').delete().eq('room_id', roomId);
+      await supabase.from('goroom_todos').delete().eq('room_id', roomId);
+      await supabase.from('goroom_diaries').delete().eq('room_id', roomId);
+      await supabase.from('goroom_room_members').delete().eq('room_id', roomId);
+      await supabase.from('goroom_rooms').delete().eq('id', roomId);
+      await deleteFolder(`calendar/${roomId}`);
+    } catch (e) { console.error('deleteRoom error:', e); }
+  };
+
+  const addFriendByCode = async (code) => {
+    try {
+      const { data: friendUser } = await supabase.from('goroom_users').select('*').eq('link_code', code).single();
+      if (!friendUser) { alert('코드에 해당하는 사용자를 찾을 수 없습니다.'); return; }
+      if (friendUser.id === userId) { alert('자기 자신을 추가할 수 없습니다.'); return; }
+      // Check if already friends
+      const existing = friends.find(f => f.id === friendUser.id);
+      if (existing) { alert('이미 친구입니다.'); return; }
+      const { data: inserted } = await supabase.from('goroom_friends').insert({
+        user_id: userId, friend_id: friendUser.id, favorite: false,
+      }).select().single();
+      setFriends(prev => [...prev, {
+        id: friendUser.id, nickname: friendUser.nickname || '?', statusMsg: friendUser.status_msg || '',
+        isPublic: true, birthday: friendUser.birthday || '', favorite: false, bio: '',
+        profileImg: friendUser.profile_img || null, profileBg: friendUser.profile_bg || null,
+        updatedAt: null, _friendRowId: inserted?.id,
+      }]);
+      alert('친구가 추가되었습니다!');
+    } catch (e) { console.error('addFriend error:', e); alert('친구 추가 실패'); }
+  };
+
+  if (loading) {
+    return <div className="gr-root"><style>{CSS}</style><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12}}><div style={{fontSize:32}}>🏠</div><div style={{color:'#999',fontSize:14}}>로딩중...</div></div></div>;
+  }
 
   const renderDetail = () => {
     const sb = !isWide;
@@ -104,16 +537,24 @@ export default function App(){
     /* 스케줄 상세 */
     if(page==='sch-detail' && schDetail){
       const s = schDetail;
+      const room = rooms.find(r => r.schedules.some(sc => sc.id === s.id));
+      const st = room?.settings || DEF_SETTINGS;
+      const pmName = s.budget?.pmId ? (st.paymentMethods || DEF_SETTINGS.paymentMethods).find(p=>p.id===s.budget.pmId)?.name || '' : '';
       return <div className="gr-panel">
-        <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">스케줄 상세</div><div style={{width:28}}/></div>
+        <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">스케줄 상세</div><div style={{display:'flex',gap:4}}>{room && <button className="gr-icon-btn" onClick={async ()=>{
+          await deleteSchedule(room.id, s.id, s.images);
+          updateRoom(room.id, r=>({...r,schedules:r.schedules.filter(sc=>sc.id!==s.id)}));
+          goBack();
+        }}><I n="trash" size={18} color="var(--gr-exp)"/></button>}</div></div>
         <div className="gr-pg-body">
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}><div style={{width:6,height:32,borderRadius:3,background:s.color||'var(--gr-acc)'}}/><div><div style={{fontSize:18,fontWeight:700}}>{s.title}</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>{s.date} {s.time||''}</div></div></div>
           {s.memo&&<div className="gr-det-section"><div className="gr-det-label">메모</div><div style={{fontSize:14,color:'var(--gr-t2)',whiteSpace:'pre-wrap'}}>{s.memo}</div></div>}
           {s.todos?.length>0&&<div className="gr-det-section"><div className="gr-det-label">할 일 ({s.todos.filter(t=>t.done).length}/{s.todos.length})</div>{s.todos.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}><div style={{width:18,height:18,borderRadius:'50%',border:'2px solid '+(t.done?'var(--gr-acc)':'var(--gr-brd)'),background:t.done?'var(--gr-acc)':'none',display:'flex',alignItems:'center',justifyContent:'center'}}>{t.done&&<I n="check" size={10} color="#fff"/>}</div><span style={{fontSize:14,textDecoration:t.done?'line-through':'none',color:t.done?'var(--gr-t3)':'var(--gr-text)'}}>{t.text}</span></div>)}</div>}
           {s.dday&&<div className="gr-det-section"><div className="gr-det-label">D-day</div><div style={{fontSize:24,fontWeight:800,color:'var(--gr-acc)'}}>D-{Math.max(0,Math.ceil((new Date(s.date)-new Date())/864e5))}</div></div>}
           {s.repeat&&<div className="gr-det-section"><div className="gr-det-label">반복</div><div style={{fontSize:14}}>{{daily:'매일',weekly:'매주',monthly:'매월',yearly:'매년',custom:`${s.repeat.interval}일마다`}[s.repeat.type]}{s.repeat.endDate?` ~ ${s.repeat.endDate}`:' (계속)'}</div></div>}
-          {s.alarm&&<div className="gr-det-section"><div className="gr-det-label">알람</div><div style={{fontSize:14}}>🔔 {{['10m']:'10분 전',['30m']:'30분 전',['1h']:'1시간 전',['1d']:'하루 전'}[s.alarm.before]||s.alarm.before}{s.alarm.message?` — ${s.alarm.message}`:''}</div></div>}
-          {s.budget&&<div className="gr-det-section"><div className="gr-det-label">가계부</div><div style={{fontSize:18,fontWeight:700,color:s.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}>{s.budget.type==='income'?'+':'-'}{s.budget.amount?.toLocaleString()}원</div>{s.budget.bCatName&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:4}}>{s.budget.bCatName}</div>}</div>}
+          {s.alarm&&<div className="gr-det-section"><div className="gr-det-label">알람</div><div style={{fontSize:14}}>🔔 {{'10m':'10분 전','30m':'30분 전','1h':'1시간 전','1d':'하루 전'}[s.alarm.before]||s.alarm.before}{s.alarm.message?` — ${s.alarm.message}`:''}</div></div>}
+          {s.budget&&<div className="gr-det-section"><div className="gr-det-label">가계부</div><div style={{fontSize:18,fontWeight:700,color:s.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}>{s.budget.type==='income'?'+':'-'}{s.budget.amount?.toLocaleString()}원</div>{s.budget.bCatName&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:4}}>{s.budget.bCatName}</div>}{pmName&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:2}}>결제: {pmName}</div>}</div>}
+          {s.images && s.images.length > 0 && <div className="gr-det-section"><div className="gr-det-label">이미지</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{s.images.map((img,i)=><img key={i} src={img} alt="" style={{width:80,height:80,objectFit:'cover',borderRadius:8}}/>)}</div></div>}
         </div>
       </div>;
     }
@@ -122,16 +563,18 @@ export default function App(){
     if(page==='profile'){
       const myRoom=rooms.find(r=>r.isPersonal);
       const handleImg=(e,key)=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>setMe(p=>({...p,[key]:ev.target.result}));r.readAsDataURL(f);};
+      const handleDone = async () => {
+        setEditProfile(false);
+        await saveProfile(me);
+      };
       return <div className="gr-panel">
-        {/* 배경 */}
         <div className="gr-profile-bg" style={{background:me.profileBg?`url(${me.profileBg}) center/cover`:'linear-gradient(135deg,#F5A928 0%,#F09819 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff',zIndex:3}}><I n="back" size={20}/></button>}
           <div className="gr-profile-top-bar">
             {editProfile && <label className="gr-profile-top-btn-s"><I n="camera" size={16} color="#333"/> 배경<input type="file" accept="image/*" onChange={e=>handleImg(e,'profileBg')} style={{display:'none'}}/></label>}
-            {editProfile ? <button className="gr-profile-top-btn" onClick={()=>setEditProfile(false)}>완료</button> : <button className="gr-profile-top-btn" onClick={()=>setEditProfile(true)}>프로필 편집</button>}
+            {editProfile ? <button className="gr-profile-top-btn" onClick={handleDone}>완료</button> : <button className="gr-profile-top-btn" onClick={()=>setEditProfile(true)}>프로필 편집</button>}
           </div>
         </div>
-        {/* 프로필 정보 */}
         <div className="gr-profile-info">
           <div className="gr-profile-avatar-wrap">
             {me.profileImg?<img src={me.profileImg} className="gr-profile-avatar-img" alt=""/>:<Avatar name={me.nickname} size={80}/>}
@@ -168,12 +611,15 @@ export default function App(){
       </div>;
     }
 
-    if(page==='add-friend') return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">친구 추가</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">친구 추가 코드 입력</div><input className="gr-input" placeholder="코드를 입력하세요" autoFocus/><button className="gr-btn-primary" style={{marginTop:12}}>추가하기</button><div className="gr-divider"><span>내 코드</span></div><div className="gr-code-box"><span>{me.linkCode}</span><button className="gr-btn-copy" onClick={()=>{navigator.clipboard?.writeText(me.linkCode);alert('복사됨!');}}>복사</button></div></div></div>;
+    if(page==='add-friend') return <AddFriendPage goBack={goBack} me={me} addFriendByCode={addFriendByCode} sb={sb}/>;
+    if(page==='notification-settings') return <NotificationSettings goBack={goBack} sb={sb}/>;
+    if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId}/>;
+
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId); if(!room) return null;
-      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} onSchClick={(s)=>{setSchDetail(s);setPage('sch-detail');}}/>;
+      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);setPage('sch-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName}/>;
     }
-    if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends}/>;
+    if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
     return null;
   };
 
@@ -182,7 +628,7 @@ export default function App(){
       {tab==='friends'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">친구</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn" onClick={()=>setPage('add-friend')}><I n="userPlus" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setSearchQ(searchQ?'':'.')}><I n="search" size={20}/></button></div></div>
         {searchQ!==''&&<div style={{padding:'0 20px 8px'}}><input className="gr-input" value={searchQ==='.'?'':searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="친구 검색" autoFocus style={{padding:'8px 12px',fontSize:13}}/></div>}
         <div className="gr-tab-body">
-          <div className="gr-friend-me" onClick={()=>openProfile('me')}><Avatar name={me.nickname} size={52}/><div className="gr-friend-info"><div className="gr-friend-name">{me.nickname}</div><div className="gr-friend-status">{me.statusMsg}</div></div></div>
+          <div className="gr-friend-me" onClick={()=>openProfile(userId)}><Avatar name={me.nickname} size={52} src={me.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{me.nickname}</div><div className="gr-friend-status">{me.statusMsg}</div></div></div>
           <div className="gr-divider-line"/>
           {(()=>{
             const today=`${String(new Date().getMonth()+1).padStart(2,'0')}-${String(new Date().getDate()).padStart(2,'0')}`;
@@ -192,16 +638,21 @@ export default function App(){
             const updatedF=filtered.filter(f=>f.updatedAt&&(Date.now()-f.updatedAt)<86400000*7);
             const favF=filtered.filter(f=>f.favorite);
             return <div>
-              {birthdayF.length>0&&<div><div className="gr-section-label">🎂 생일인 친구 {birthdayF.length}</div>{birthdayF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} 🎂</div><div className="gr-friend-status">오늘 생일이에요!</div></div></div>)}</div>}
-              {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
-              {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
+              {birthdayF.length>0&&<div><div className="gr-section-label">🎂 생일인 친구 {birthdayF.length}</div>{birthdayF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} 🎂</div><div className="gr-friend-status">오늘 생일이에요!</div></div></div>)}</div>}
+              {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
+              {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               <div className="gr-section-label">친구 {filtered.length}</div>
-              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#F5A928"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
+              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#F5A928"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
             </div>;
           })()}
         </div></>}
       {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setPage('add-room')}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
-      {tab==='more'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">더보기</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body" style={{padding:20}}><div className="gr-more-item" onClick={()=>openProfile('me')}><I n="user" size={20}/><span>내 프로필</span></div><div className="gr-more-item"><I n="link" size={20}/><span>친구 추가 코드</span></div><div className="gr-more-item"><I n="bell" size={20}/><span>알림 설정</span></div><div className="gr-more-item"><I n="gear" size={20}/><span>설정</span></div></div></>}
+      {tab==='more'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">더보기</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body" style={{padding:20}}>
+        <div className="gr-more-item" onClick={()=>openProfile(userId)}><I n="user" size={20}/><span>내 프로필</span></div>
+        <div className="gr-more-item" onClick={()=>setPage('add-friend')}><I n="link" size={20}/><span>친구 추가 코드</span></div>
+        <div className="gr-more-item" onClick={()=>setPage('notification-settings')}><I n="bell" size={20}/><span>알림 설정</span></div>
+        <div className="gr-more-item" onClick={()=>setPage('app-settings')}><I n="gear" size={20}/><span>설정</span></div>
+      </div></>}
       <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>setTab('friends')}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>setTab('rooms')}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>setTab('more')}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>
   );
@@ -211,7 +662,106 @@ export default function App(){
   return (<div className="gr-root"><style>{CSS}</style>{detail || renderSidebar()}</div>);
 }
 
-/* ProfileEdit 삭제됨 — 인라인 편집 방식으로 대체 */
+/* ── 더보기 > 친구 추가 코드 ── */
+function AddFriendPage({goBack, me, addFriendByCode, sb}) {
+  const [code, setCode] = useState('');
+  const [adding, setAdding] = useState(false);
+  const handleAdd = async () => {
+    if (!code.trim()) return;
+    setAdding(true);
+    await addFriendByCode(code.trim());
+    setAdding(false);
+    setCode('');
+  };
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">친구 추가</div><div style={{width:28}}/></div>
+    <div className="gr-pg-body">
+      <div className="gr-pg-label">친구 추가 코드 입력</div>
+      <input className="gr-input" value={code} onChange={e=>setCode(e.target.value)} placeholder="코드를 입력하세요" autoFocus onKeyDown={e=>e.key==='Enter'&&handleAdd()}/>
+      <button className="gr-btn-primary" style={{marginTop:12}} onClick={handleAdd} disabled={adding}>{adding?'추가중...':'추가하기'}</button>
+      <div className="gr-divider"><span>내 코드</span></div>
+      <div className="gr-code-box"><span>{me.linkCode}</span><button className="gr-btn-copy" onClick={()=>{navigator.clipboard?.writeText(me.linkCode);alert('복사됨!');}}>복사</button></div>
+    </div>
+  </div>;
+}
+
+/* ── 더보기 > 알림 설정 ── */
+function NotificationSettings({goBack, sb}) {
+  const [scheduleNoti, setScheduleNoti] = useState(() => localStorage.getItem('gr_noti_schedule') !== 'false');
+  const [friendNoti, setFriendNoti] = useState(() => localStorage.getItem('gr_noti_friend') !== 'false');
+  const [feedNoti, setFeedNoti] = useState(() => localStorage.getItem('gr_noti_feed') !== 'false');
+
+  const toggle = (key, val, setter) => {
+    const newVal = !val;
+    setter(newVal);
+    localStorage.setItem(key, String(newVal));
+  };
+
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">알림 설정</div><div style={{width:28}}/></div>
+    <div className="gr-pg-body">
+      <div className="gr-set-row"><span className="gr-set-label"><I n="cal" size={16}/> 스케줄 알림</span><Toggle on={scheduleNoti} toggle={()=>toggle('gr_noti_schedule',scheduleNoti,setScheduleNoti)}/></div>
+      <div className="gr-set-row"><span className="gr-set-label"><I n="userPlus" size={16}/> 친구 요청 알림</span><Toggle on={friendNoti} toggle={()=>toggle('gr_noti_friend',friendNoti,setFriendNoti)}/></div>
+      <div className="gr-set-row"><span className="gr-set-label"><I n="book" size={16}/> 피드 알림</span><Toggle on={feedNoti} toggle={()=>toggle('gr_noti_feed',feedNoti,setFeedNoti)}/></div>
+    </div>
+  </div>;
+}
+
+/* ── 더보기 > 설정 ── */
+function AppSettings({goBack, sb, userId}) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem('goroom_user_id');
+    localStorage.removeItem('gr_noti_schedule');
+    localStorage.removeItem('gr_noti_friend');
+    localStorage.removeItem('gr_noti_feed');
+    window.location.reload();
+  };
+
+  const handleReset = async () => {
+    if (!confirmReset) { setConfirmReset(true); return; }
+    try {
+      // Delete all user data from Supabase
+      const { data: memberRows } = await supabase.from('goroom_room_members').select('room_id').eq('user_id', userId);
+      const roomIds = (memberRows || []).map(m => m.room_id);
+      for (const rid of roomIds) {
+        await supabase.from('goroom_schedules').delete().eq('room_id', rid);
+        await supabase.from('goroom_memos').delete().eq('room_id', rid);
+        await supabase.from('goroom_todos').delete().eq('room_id', rid);
+        await supabase.from('goroom_diaries').delete().eq('room_id', rid);
+        await supabase.from('goroom_room_members').delete().eq('room_id', rid);
+        await supabase.from('goroom_rooms').delete().eq('id', rid);
+        await deleteFolder(`calendar/${rid}`);
+      }
+      await supabase.from('goroom_friends').delete().eq('user_id', userId);
+      await deleteFolder(`user/${userId}`);
+      await supabase.from('goroom_users').delete().eq('id', userId);
+      localStorage.removeItem('goroom_user_id');
+      window.location.reload();
+    } catch (e) {
+      console.error('Reset error:', e);
+      alert('초기화 실패');
+    }
+  };
+
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">설정</div><div style={{width:28}}/></div>
+    <div className="gr-pg-body">
+      <div className="gr-set-row"><span className="gr-set-label">테마</span><span className="gr-set-val">라이트 (준비중)</span></div>
+      <div className="gr-set-row"><span className="gr-set-label">언어</span><span className="gr-set-val">한국어</span></div>
+      <div className="gr-set-row"><span className="gr-set-label">앱 정보</span><span className="gr-set-val">GoRoom v2.0.0</span></div>
+      <div style={{marginTop:24}}>
+        <button className="gr-btn-primary" onClick={handleLogout} style={{background:'var(--gr-t2)',marginBottom:12}}>
+          <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><I n="logout" size={16} color="#fff"/> 로그아웃</span>
+        </button>
+        <button className="gr-btn-danger" onClick={handleReset}>
+          <I n="trash" size={16}/> {confirmReset ? '정말 초기화하시겠습니까? (다시 클릭)' : '데이터 초기화'}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
 
 function MiniCal({schedules,onSchClick}){
   const [nav,setNav]=useState(new Date()); const [sel,setSel]=useState(new Date()); const today=useMemo(()=>new Date(),[]);
@@ -230,42 +780,81 @@ function MiniCal({schedules,onSchClick}){
   </div>;
 }
 
-function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,onSchClick}){
+function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,userId,onSchClick,saveSchedule,saveMemo,deleteMemo,updateMemoPin,saveTodo,deleteTodo,updateTodoDone,saveDiary,deleteDiary,updateDiaryLikes,updateDiaryComments,updateRoomInDb,deleteSchedule,deleteRoom,getName}){
   const [sel,setSel]=useState(new Date()); const [nav,setNav]=useState(new Date()); const today=useMemo(()=>new Date(),[]);
   const activeMenus=ALL_MENUS.filter(m=>room.menus[m.id]);
-  const memberList=room.members.map(id=>id==='me'?{id:'me',nickname:'나'}:friends.find(f=>f.id===id)||{id,nickname:'?'});
+  const memberList=room.members.map(id=>id===userId?{id:userId,nickname:'나'}:friends.find(f=>f.id===id)||{id,nickname:'?'});
   const isMulti = room.members.length > 1;
-  const getName = (id) => id==='me' ? (me?.nickname||'나') : (friends.find(f=>f.id===id)?.nickname||'?');
 
-  if(subPage==='settings') return <RoomSettings room={room} updateRoom={updateRoom} friends={friends} memberList={memberList} sb={sb} goBack={()=>setSubPage(null)} setSubPage={setSubPage}/>;
-  if(subPage==='invite') return <InviteMembers room={room} updateRoom={updateRoom} friends={friends} sb={sb} goBack={()=>setSubPage(null)}/>;
-  if(subPage==='add-schedule') return <div className="gr-panel"><ScheduleForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} selDate={fmt(sel)} sb={sb}/></div>;
-  if(subPage==='add-memo') return <div className="gr-panel"><MemoForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb}/></div>;
-  if(subPage==='add-todo') return <div className="gr-panel"><SimpleForm title="새 할일" fields={[{k:'title',l:'할 일'}]} goBack={()=>setSubPage(null)} onSave={v=>{updateRoom(room.id,r=>({...r,todos:[...r.todos,{id:uid(),text:v.title,done:false,createdAt:Date.now(),createdBy:'me',doneAt:null,doneBy:null}]}));setSubPage(null);}} sb={sb}/></div>;
-  if(subPage==='add-diary') return <div className="gr-panel"><DiaryForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb}/></div>;
-  if(subPage==='add-budget') return <div className="gr-panel"><BudgetForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb}/></div>;
+  if(subPage==='settings') return <RoomSettings room={room} updateRoom={updateRoom} friends={friends} memberList={memberList} sb={sb} goBack={()=>setSubPage(null)} setSubPage={setSubPage} updateRoomInDb={updateRoomInDb} deleteRoom={deleteRoom} userId={userId}/>;
+  if(subPage==='invite') return <InviteMembers room={room} updateRoom={updateRoom} friends={friends} sb={sb} goBack={()=>setSubPage(null)} userId={userId}/>;
+  if(subPage==='add-schedule') return <div className="gr-panel"><ScheduleForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} selDate={fmt(sel)} sb={sb} saveSchedule={saveSchedule} userId={userId}/></div>;
+  if(subPage==='add-memo') return <div className="gr-panel"><MemoForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveMemoDb={saveMemo} userId={userId}/></div>;
+  if(subPage==='add-todo') return <div className="gr-panel"><SimpleForm title="새 할일" fields={[{k:'title',l:'할 일'}]} goBack={()=>setSubPage(null)} onSave={async v=>{
+    const todo = {id:uid(),text:v.title,done:false,createdAt:Date.now(),createdBy:userId,doneAt:null,doneBy:null};
+    updateRoom(room.id,r=>({...r,todos:[...r.todos,todo]}));
+    await saveTodo(room.id, todo);
+    setSubPage(null);
+  }} sb={sb}/></div>;
+  if(subPage==='add-diary') return <div className="gr-panel"><DiaryForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveDiaryDb={saveDiary} userId={userId}/></div>;
+  if(subPage==='add-budget') return <div className="gr-panel"><BudgetForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveSchedule={saveSchedule} userId={userId}/></div>;
   const fabMap={cal:'add-schedule',memo:'add-memo',todo:'add-todo',diary:'add-diary',budget:'add-budget'};
-  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#fff"/></button>}</div>;
+  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom} deleteMemoDb={deleteMemo} updateMemoPinDb={updateMemoPin}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName} deleteTodoDb={deleteTodo} updateTodoDoneDb={updateTodoDone} userId={userId}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} userId={userId}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules} room={room}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#fff"/></button>}</div>;
 }
 
-function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage}){
+function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,updateRoomInDb,deleteRoom,userId}){
   const [name,setName]=useState(room.name); const [desc,setDesc]=useState(room.desc); const [editing,setEditing]=useState(false);
   const [addCatName,setAddCatName]=useState(''); const [addCatColor,setAddCatColor]=useState('#4A90D9');
   const [addExpName,setAddExpName]=useState(''); const [addIncName,setAddIncName]=useState('');
+  const [addPmName, setAddPmName] = useState(''); const [addPmType, setAddPmType] = useState('card');
   const st = room.settings || DEF_SETTINGS;
-  const saveInfo=()=>{updateRoom(room.id,r=>({...r,name:name.trim()||r.name,desc:desc.trim()}));setEditing(false);};
-  const updSettings=(fn)=>updateRoom(room.id,r=>({...r,settings:fn(r.settings||DEF_SETTINGS)}));
-  const addSchCat=()=>{if(!addCatName.trim())return; updSettings(s=>({...s,schCats:[...s.schCats,{id:uid(),name:addCatName.trim(),color:addCatColor}]})); setAddCatName('');};
+  const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
+
+  const saveInfo=async ()=>{
+    const newName = name.trim()||room.name;
+    const newDesc = desc.trim();
+    updateRoom(room.id,r=>({...r,name:newName,desc:newDesc}));
+    await updateRoomInDb(room.id, { name: newName, description: newDesc });
+    setEditing(false);
+  };
+  const updSettings=(fn)=>{
+    const newSettings = fn(room.settings||DEF_SETTINGS);
+    updateRoom(room.id,r=>({...r,settings:newSettings}));
+    updateRoomInDb(room.id, { settings: newSettings });
+  };
+  const addSchCat=()=>{if(!addCatName.trim())return; updSettings(s=>({...s,schCats:[...s.schCats,{id:shortId(),name:addCatName.trim(),color:addCatColor}]})); setAddCatName('');};
   const delSchCat=(id)=>updSettings(s=>({...s,schCats:s.schCats.filter(c=>c.id!==id)}));
-  const addExpCat=()=>{if(!addExpName.trim())return; updSettings(s=>({...s,expCats:[...s.expCats,{id:uid(),name:addExpName.trim()}]})); setAddExpName('');};
+  const addExpCat=()=>{if(!addExpName.trim())return; updSettings(s=>({...s,expCats:[...s.expCats,{id:shortId(),name:addExpName.trim()}]})); setAddExpName('');};
   const delExpCat=(id)=>updSettings(s=>({...s,expCats:s.expCats.filter(c=>c.id!==id)}));
-  const addIncCat=()=>{if(!addIncName.trim())return; updSettings(s=>({...s,incCats:[...s.incCats,{id:uid(),name:addIncName.trim()}]})); setAddIncName('');};
+  const addIncCat=()=>{if(!addIncName.trim())return; updSettings(s=>({...s,incCats:[...s.incCats,{id:shortId(),name:addIncName.trim()}]})); setAddIncName('');};
   const delIncCat=(id)=>updSettings(s=>({...s,incCats:s.incCats.filter(c=>c.id!==id)}));
+  const addPm=()=>{if(!addPmName.trim())return; updSettings(s=>({...s,paymentMethods:[...(s.paymentMethods||[]),{id:shortId(),name:addPmName.trim(),type:addPmType}]})); setAddPmName('');};
+  const delPm=(id)=>updSettings(s=>({...s,paymentMethods:(s.paymentMethods||[]).filter(c=>c.id!==id)}));
+
+  const handleTogglePublic = async () => {
+    updateRoom(room.id,r=>({...r,isPublic:!r.isPublic}));
+    await updateRoomInDb(room.id, { is_public: !room.isPublic });
+  };
+  const handleToggleMenu = async (menuId) => {
+    const newMenus = {...room.menus,[menuId]:!room.menus[menuId]};
+    updateRoom(room.id,r=>({...r,menus:newMenus}));
+    await updateRoomInDb(room.id, { menus: newMenus });
+  };
+  const handleDeleteRoom = async () => {
+    if(!window.confirm('이 캘린더를 삭제하시겠습니까?')) return;
+    await deleteRoom(room.id);
+    window.location.reload();
+  };
+  const handleRemoveMember = async (memberId) => {
+    updateRoom(room.id,r=>({...r,members:r.members.filter(x=>x!==memberId)}));
+    try {
+      await supabase.from('goroom_room_members').delete().eq('room_id', room.id).eq('user_id', memberId);
+    } catch(e) { console.error(e); }
+  };
 
   return <div className="gr-panel">
     <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">캘린더 설정</div><div style={{width:28}}/></div>
     <div className="gr-pg-body">
-      {/* 캘린더 정보 */}
       <div className="gr-pg-label">캘린더 정보 {!editing&&<button className="gr-icon-btn-sm" onClick={()=>setEditing(true)}><I n="edit" size={14}/></button>}</div>
       {editing ? <div>
         <input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={{marginBottom:8}}/>
@@ -275,19 +864,16 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage})
         <div className="gr-set-row"><span className="gr-set-label">이름</span><span className="gr-set-val">{room.name}</span></div>
         <div className="gr-set-row"><span className="gr-set-label">설명</span><span className="gr-set-val">{room.desc||'-'}</span></div>
       </div>}
-      <div className="gr-set-row"><span className="gr-set-label">공개</span><Toggle on={room.isPublic} toggle={()=>updateRoom(room.id,r=>({...r,isPublic:!r.isPublic}))}/></div>
+      <div className="gr-set-row"><span className="gr-set-label">공개</span><Toggle on={room.isPublic} toggle={handleTogglePublic}/></div>
 
-      {/* 멤버 */}
       <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#fff"/> 초대</button></div>
-      {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!=='me'&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>updateRoom(room.id,r=>({...r,members:r.members.filter(x=>x!==m.id)}))}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
+      {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!==userId&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
 
-      {/* 기능 ON/OFF + 세부설정 */}
       <div className="gr-pg-label" style={{marginTop:20}}>기능 ON/OFF</div>
 
       {ALL_MENUS.map(m=> <div key={m.id}>
-        <div className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={room.menus[m.id]} toggle={()=>updateRoom(room.id,r=>({...r,menus:{...r.menus,[m.id]:!r.menus[m.id]}}))}/></div>
+        <div className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={room.menus[m.id]} toggle={()=>handleToggleMenu(m.id)}/></div>
 
-        {/* 캘린더 ON → 카테고리 관리 */}
         {m.id==='cal' && room.menus.cal && <div className="gr-setting-detail">
           <div className="gr-setting-detail-title">스케줄 카테고리</div>
           <div className="gr-tag-list">{st.schCats.map(c=> <div key={c.id} className="gr-tag-item">
@@ -300,7 +886,6 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage})
           </div>
         </div>}
 
-        {/* 가계부 ON → 지출/수입 카테고리 관리 */}
         {m.id==='budget' && room.menus.budget && <div className="gr-setting-detail">
           <div className="gr-setting-detail-title">지출 카테고리</div>
           <div className="gr-tag-list">{st.expCats.map(c=> <div key={c.id} className="gr-tag-item">
@@ -314,24 +899,42 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage})
             <span>{c.name}</span>
             <button className="gr-icon-btn-sm" onClick={()=>delIncCat(c.id)}><I n="x" size={12} color="var(--gr-t3)"/></button>
           </div>)}</div>
-          <div style={{display:'flex',gap:6}}><input className="gr-input" value={addIncName} onChange={e=>setAddIncName(e.target.value)} placeholder="수입 카테고리" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addIncCat()}/><button className="gr-btn-sm" onClick={addIncCat}>추가</button></div>
+          <div style={{display:'flex',gap:6,marginBottom:12}}><input className="gr-input" value={addIncName} onChange={e=>setAddIncName(e.target.value)} placeholder="수입 카테고리" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addIncCat()}/><button className="gr-btn-sm" onClick={addIncCat}>추가</button></div>
+
+          <div className="gr-setting-detail-title">결제수단 관리</div>
+          <div className="gr-tag-list">{paymentMethods.map(pm=> <div key={pm.id} className="gr-tag-item">
+            <span>{pm.name}</span>
+            <button className="gr-icon-btn-sm" onClick={()=>delPm(pm.id)}><I n="x" size={12} color="var(--gr-t3)"/></button>
+          </div>)}</div>
+          <div style={{display:'flex',gap:6}}>
+            <input className="gr-input" value={addPmName} onChange={e=>setAddPmName(e.target.value)} placeholder="결제수단 이름" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addPm()}/>
+            <select value={addPmType} onChange={e=>setAddPmType(e.target.value)} style={{padding:'8px',borderRadius:8,border:'1px solid var(--gr-brd)',fontSize:13,fontFamily:'var(--gr-ff)'}}>
+              <option value="card">카드</option><option value="account">계좌</option><option value="cash">현금</option>
+            </select>
+            <button className="gr-btn-sm" onClick={addPm}>추가</button>
+          </div>
         </div>}
 
-        {/* 알림 ON → 기본 알림 설정 */}
         {m.id==='alarm' && room.menus.alarm && <div className="gr-setting-detail">
           <div style={{fontSize:12,color:'var(--gr-t3)'}}>스케줄 등록 시 알람을 설정할 수 있습니다.</div>
         </div>}
       </div>)}
 
-      <button className="gr-btn-danger" style={{marginTop:24}}><I n="trash" size={16}/> 캘린더 삭제</button>
+      <button className="gr-btn-danger" style={{marginTop:24}} onClick={handleDeleteRoom}><I n="trash" size={16}/> 캘린더 삭제</button>
     </div>
   </div>;
 }
 
-function InviteMembers({room,updateRoom,friends,sb,goBack}){
+function InviteMembers({room,updateRoom,friends,sb,goBack,userId}){
   const available=friends.filter(f=>!room.members.includes(f.id));
-  const invite=(fid)=>{updateRoom(room.id,r=>({...r,members:[...r.members,fid]}));goBack();};
-  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">멤버 초대</div><div style={{width:28}}/></div><div className="gr-pg-body">{available.length===0?<div className="gr-empty">초대 가능한 친구가 없습니다</div>:available.map(f=> <div key={f.id} className="gr-friend-row" onClick={()=>invite(f.id)}><Avatar name={f.nickname} size={40}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div><button className="gr-btn-invite"><I n="plus" size={14} color="#fff"/> 초대</button></div>)}</div></div>;
+  const invite=async (fid)=>{
+    updateRoom(room.id,r=>({...r,members:[...r.members,fid]}));
+    try {
+      await supabase.from('goroom_room_members').insert({ room_id: room.id, user_id: fid, role: 'member' });
+    } catch(e) { console.error(e); }
+    goBack();
+  };
+  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">멤버 초대</div><div style={{width:28}}/></div><div className="gr-pg-body">{available.length===0?<div className="gr-empty">초대 가능한 친구가 없습니다</div>:available.map(f=> <div key={f.id} className="gr-friend-row" onClick={()=>invite(f.id)}><Avatar name={f.nickname} size={40} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div><button className="gr-btn-invite"><I n="plus" size={14} color="#fff"/> 초대</button></div>)}</div></div>;
 }
 
 function SchCard({sc,onClick}){
@@ -351,24 +954,48 @@ function RoomCal({nav,setNav,sel,setSel,today,schedules,onSchClick}){
   return <div><div className="gr-cal-nav"><button className="gr-cal-nav-btn" onClick={()=>mv(-1)}><I n="left" size={18}/></button><h3>{y}년 {MO[m]}</h3><button className="gr-cal-nav-btn" onClick={()=>mv(1)}><I n="right" size={18}/></button></div><div className="gr-cal-head">{DAYS.map(d=><span key={d}>{d}</span>)}</div><div className="gr-cal-grid">{cells.map((c,i)=>{const ds=fmt(c.dt),dd=dots(ds); return <div key={i} className={`gr-cal-cell ${c.o?'ot':''} ${ds===ts?'tod':''} ${ds===ss&&ds!==ts?'sel':''}`} onClick={()=>setSel(c.dt)}><span className="gr-cal-d">{c.d}</span>{dd.length>0&&<div className="gr-cal-dots">{dd.map((sc,j)=><span key={j} style={{background:sc.color||'var(--gr-acc)'}}/>)}</div>}</div>;})}</div><div className="gr-cal-sel-info"><div className="gr-cal-sel-date">{sel.getMonth()+1}월 {sel.getDate()}일 {DAYS[sel.getDay()]}요일</div>{selSchs.length===0?<div className="gr-cal-empty">스케줄이 없습니다</div>:selSchs.map(sc=> <SchCard key={sc.id} sc={sc} onClick={()=>onSchClick&&onSchClick(sc)}/>)}</div></div>;
 }
 
-function RoomMemo({memos,room,updateRoom}){
+function RoomMemo({memos,room,updateRoom,deleteMemoDb,updateMemoPinDb}){
   const [q,setQ]=useState(''); const [viewMode,setViewMode]=useState('box');
-  const togglePin=id=>updateRoom(room.id,r=>({...r,memos:r.memos.map(m=>m.id===id?{...m,pinned:!m.pinned}:m)}));
-  const del=id=>updateRoom(room.id,r=>({...r,memos:r.memos.filter(m=>m.id!==id)}));
+  const togglePin=async (id)=>{
+    const memo = memos.find(m=>m.id===id);
+    if(!memo) return;
+    const newPinned = !memo.pinned;
+    updateRoom(room.id,r=>({...r,memos:r.memos.map(m=>m.id===id?{...m,pinned:newPinned}:m)}));
+    await updateMemoPinDb(id, newPinned);
+  };
+  const del=async (id)=>{
+    updateRoom(room.id,r=>({...r,memos:r.memos.filter(m=>m.id!==id)}));
+    await deleteMemoDb(id);
+  };
   if(!memos.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>📝</div>메모를 추가해보세요</div>;
   const filtered=memos.filter(m=>{if(!q.trim()) return true; const kw=q.toLowerCase(); return (m.title||'').toLowerCase().includes(kw)||(m.content||'').toLowerCase().includes(kw);}); const pinned=filtered.filter(m=>m.pinned); const normal=filtered.filter(m=>!m.pinned).sort((a,b)=>b.createdAt-a.createdAt); const all=[...pinned,...normal];
   return <div style={{padding:12}}><div className="gr-memo-toolbar"><div className="gr-memo-search"><I n="search" size={14} color="var(--gr-t3)"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="메모 검색..." className="gr-memo-search-input"/></div><div className="gr-memo-view-toggle"><button className={`gr-icon-btn-sm ${viewMode==='list'?'active':''}`} onClick={()=>setViewMode('list')}><I n="list" size={16}/></button><button className={`gr-icon-btn-sm ${viewMode==='box'?'active':''}`} onClick={()=>setViewMode('box')}><I n="grid" size={16}/></button></div></div>{filtered.length===0&&<div className="gr-cal-empty">검색 결과가 없습니다</div>}{viewMode==='box'?all.map(m=> <div key={m.id} className={`gr-memo-card ${m.pinned?'pinned':''}`}><div className="gr-memo-card-top"><div className="gr-memo-title">{m.title}</div><div className="gr-memo-card-actions"><button className="gr-icon-btn-sm" onClick={()=>togglePin(m.id)}><I n="pin" size={14} color={m.pinned?'var(--gr-acc)':'var(--gr-t3)'}/></button><button className="gr-icon-btn-sm" onClick={()=>del(m.id)}><I n="trash" size={14} color="var(--gr-exp)"/></button></div></div><div className="gr-memo-preview">{m.content?.slice(0,80)}</div><div className="gr-memo-date">{fmtTime(m.createdAt)}</div></div>):all.map(m=> <div key={m.id} className={`gr-memo-list-row ${m.pinned?'pinned':''}`}>{m.pinned&&<I n="pin" size={12} color="var(--gr-acc)"/>}<div className="gr-memo-list-title">{m.title}</div><div className="gr-memo-list-date">{fmtTime(m.createdAt)}</div><button className="gr-icon-btn-sm" onClick={()=>togglePin(m.id)}><I n="pin" size={14} color={m.pinned?'var(--gr-acc)':'var(--gr-t3)'}/></button><button className="gr-icon-btn-sm" onClick={()=>del(m.id)}><I n="trash" size={14} color="var(--gr-exp)"/></button></div>)}</div>;
 }
 
-function MemoForm({goBack,room,updateRoom,sb}){
+function MemoForm({goBack,room,updateRoom,sb,saveMemoDb,userId}){
   const [title,setTitle]=useState(''); const [content,setContent]=useState('');
-  const save=()=>{if(!title.trim()) return;updateRoom(room.id,r=>({...r,memos:[...r.memos,{id:uid(),title:title.trim(),content,pinned:false,createdAt:Date.now()}]}));goBack();};
+  const save=async ()=>{
+    if(!title.trim()) return;
+    const memo = {id:uid(),title:title.trim(),content,pinned:false,createdAt:Date.now(),createdBy:userId};
+    updateRoom(room.id,r=>({...r,memos:[...r.memos,memo]}));
+    await saveMemoDb(room.id, memo);
+    goBack();
+  };
   return <div style={{display:'flex',flexDirection:'column',height:'100%'}}><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 메모</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">제목</div><input className="gr-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="메모 제목" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">내용</div><textarea className="gr-input" value={content} onChange={e=>setContent(e.target.value)} placeholder="내용을 입력하세요" rows={6} style={{resize:'none'}}/></div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()} onClick={save}>저장하기</button></div></div>;
 }
 
-function RoomTodo({todos,room,updateRoom,isMulti,getName}){
-  const toggle=id=>updateRoom(room.id,r=>({...r,todos:r.todos.map(t=>t.id===id?{...t,done:!t.done,doneAt:!t.done?Date.now():null,doneBy:!t.done?'me':null}:t)}));
-  const del=id=>updateRoom(room.id,r=>({...r,todos:r.todos.filter(t=>t.id!==id)}));
+function RoomTodo({todos,room,updateRoom,isMulti,getName,deleteTodoDb,updateTodoDoneDb,userId}){
+  const toggle=async (id)=>{
+    const t = todos.find(x=>x.id===id);
+    if(!t) return;
+    const newDone = !t.done;
+    updateRoom(room.id,r=>({...r,todos:r.todos.map(t=>t.id===id?{...t,done:newDone,doneAt:newDone?Date.now():null,doneBy:newDone?userId:null}:t)}));
+    await updateTodoDoneDb(id, newDone);
+  };
+  const del=async (id)=>{
+    updateRoom(room.id,r=>({...r,todos:r.todos.filter(t=>t.id!==id)}));
+    await deleteTodoDb(id);
+  };
   if(!todos.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>✅</div>할 일을 추가해보세요</div>;
   return <div style={{padding:12}}>{todos.map(t=> <div key={t.id} className="gr-todo-row">
     <button className={`gr-todo-cb ${t.done?'done':''}`} onClick={()=>toggle(t.id)}>{t.done&&<I n="check" size={14} color="#fff"/>}</button>
@@ -402,7 +1029,6 @@ function ImageViewer({images,startIdx,onClose}){
 }
 
 function DiarySlider({images,onImgClick}){
-  const ref=useState(null)[1];
   return <div className="gr-thr-slider">
     {images.map((img,i)=> <div key={i} className="gr-thr-slide" onClick={e=>{e.stopPropagation();onImgClick(i);}}>
       <img src={img} className="gr-thr-slide-img" alt=""/>
@@ -411,37 +1037,42 @@ function DiarySlider({images,onImgClick}){
   </div>;
 }
 
-function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick}){
+function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick,updateDiaryLikes,updateDiaryComments,userId}){
   const [commentText,setCommentText]=useState('');
   const [viewerImgs,setViewerImgs]=useState(null);
   const [viewerIdx,setViewerIdx]=useState(0);
   const [replyTo,setReplyTo]=useState(null);
-  const [feedMode,setFeedMode]=useState('list'); /* list | image */
 
-  const toggleLike=(did,e)=>{
+  const toggleLike=async (did,e)=>{
     e.stopPropagation();
+    let newLikes;
     updateRoom(room.id,r=>({...r,diaries:r.diaries.map(d=>{
       if(d.id!==did) return d;
       const likes=d.likes||[];
-      const already=likes.includes('me');
-      return {...d,likes:already?likes.filter(x=>x!=='me'):[...likes,'me']};
+      const already=likes.includes(userId);
+      newLikes = already?likes.filter(x=>x!==userId):[...likes,userId];
+      return {...d,likes:newLikes};
     })}));
+    if(newLikes) await updateDiaryLikes(did, newLikes);
   };
-  const addComment=(did)=>{
+  const addComment=async (did)=>{
     if(!commentText.trim()) return;
+    const newComment = {id:shortId(),text:commentText.trim(),by:userId,at:Date.now()};
+    let newComments;
     updateRoom(room.id,r=>({...r,diaries:r.diaries.map(d=>{
       if(d.id!==did) return d;
-      return {...d,comments:[...(d.comments||[]),{id:uid(),text:commentText.trim(),by:'me',at:Date.now()}]};
+      newComments = [...(d.comments||[]),newComment];
+      return {...d,comments:newComments};
     })}));
     setCommentText('');
+    if(newComments) await updateDiaryComments(did, newComments);
   };
   const share=(d,e)=>{
     e.stopPropagation();
-    const text=`${d.mood||''}${d.weather||''} ${d.title}\n${d.content?.slice(0,100)||''}`;
-    if(navigator.share) navigator.share({title:d.title,text}).catch(()=>{});
+    const text=`${d.mood||''}${d.weather||''} ${d.title||''}\n${d.content?.slice(0,100)||''}`;
+    if(navigator.share) navigator.share({title:d.title||'',text}).catch(()=>{});
     else {navigator.clipboard?.writeText(text);alert('복사됨!');}
   };
-  const openViewer=(imgs,i,e)=>{e.stopPropagation();setViewerImgs(imgs);setViewerIdx(i);};
 
   if(!diaries.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>📖</div>일기를 작성해보세요</div>;
 
@@ -449,26 +1080,22 @@ function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick
     {viewerImgs&&<ImageViewer images={viewerImgs} startIdx={viewerIdx} onClose={()=>setViewerImgs(null)}/>}
 
     {diaries.sort((a,b)=>b.createdAt-a.createdAt).map(d=> <div key={d.id} className="gr-thr-post">
-      {/* 헤더: 아바타 + 이름 + 시간 + 더보기 */}
       <div className="gr-thr-post-header">
-        <Avatar name={getName(d.createdBy||'me')} size={36}/>
+        <Avatar name={getName(d.createdBy||userId)} size={36}/>
         <div style={{flex:1}}>
-          <div className="gr-thr-post-name">{getName(d.createdBy||'me')} <span className="gr-thr-post-time">{d.createdAt?fmtTime(d.createdAt):d.date}</span></div>
-          <div className="gr-thr-post-text">{d.mood||''}{d.weather||''} {d.title}</div>
+          <div className="gr-thr-post-name">{getName(d.createdBy||userId)} <span className="gr-thr-post-time">{d.createdAt?fmtTime(d.createdAt):d.date}</span></div>
+          <div className="gr-thr-post-text">{d.mood||''}{d.weather||''} {d.title||''}</div>
         </div>
         <button className="gr-icon-btn"><I n="more" size={18}/></button>
       </div>
 
-      {/* 본문 */}
       {d.content&&<div className="gr-thr-post-body">{d.content}</div>}
 
-      {/* 이미지 슬라이더 */}
       {d.images&&d.images.length>0&&<DiarySlider images={d.images} onImgClick={(i)=>{setViewerImgs(d.images);setViewerIdx(i);}}/>}
 
-      {/* 좋아요 / 댓글 / 공유 */}
       <div className="gr-thr-post-actions">
         <button className="gr-thr-act-btn" onClick={e=>toggleLike(d.id,e)}>
-          {(d.likes||[]).includes('me') ? <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--gr-exp)" stroke="var(--gr-exp)" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gr-t3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>}
+          {(d.likes||[]).includes(userId) ? <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--gr-exp)" stroke="var(--gr-exp)" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gr-t3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>}
           <span>{(d.likes||[]).length||''}</span>
         </button>
         <button className="gr-thr-act-btn" onClick={e=>{e.stopPropagation();setReplyTo(replyTo===d.id?null:d.id);}}>
@@ -480,7 +1107,6 @@ function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick
         </button>
       </div>
 
-      {/* 댓글 영역 */}
       {(replyTo===d.id || (d.comments||[]).length>0) && <div className="gr-thr-comments">
         {(d.comments||[]).map(c=> <div key={c.id} className="gr-thr-comment">
           <Avatar name={getName(c.by)} size={28}/>
@@ -502,9 +1128,48 @@ function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick
   </div>;
 }
 
-function RoomBudget({schedules}){
-  const budgets=schedules.filter(s=>s.budget); const inc=budgets.filter(s=>s.budget.type==='income').reduce((a,s)=>a+s.budget.amount,0); const exp=budgets.filter(s=>s.budget.type==='expense').reduce((a,s)=>a+s.budget.amount,0);
-  return <div style={{padding:12}}><div className="gr-budget-summary"><div className="gr-budget-box"><div className="gr-budget-label">수입</div><div className="gr-budget-val" style={{color:'var(--gr-inc)'}}>+{inc.toLocaleString()}</div></div><div className="gr-budget-box"><div className="gr-budget-label">지출</div><div className="gr-budget-val" style={{color:'var(--gr-exp)'}}>-{exp.toLocaleString()}</div></div><div className="gr-budget-box"><div className="gr-budget-label">잔액</div><div className="gr-budget-val" style={{color:inc-exp>=0?'var(--gr-inc)':'var(--gr-exp)'}}>{(inc-exp).toLocaleString()}</div></div></div>{budgets.length===0?<div className="gr-cal-empty" style={{marginTop:20}}>내역이 없습니다</div>:budgets.sort((a,b)=>b.createdAt-a.createdAt).map(sc=> <div key={sc.id} className="gr-budget-row"><div className="gr-budget-dot" style={{background:sc.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}/><div className="gr-budget-info"><div style={{fontWeight:500}}>{sc.title}</div><div style={{fontSize:11,color:'var(--gr-t3)'}}>{sc.date}</div></div><div style={{fontWeight:700,color:sc.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}>{sc.budget.type==='income'?'+':'-'}{sc.budget.amount.toLocaleString()}원</div></div>)}</div>;
+function RoomBudget({schedules, room}){
+  const [searchQ, setSearchQ] = useState('');
+  const st = room?.settings || DEF_SETTINGS;
+  const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
+  const getPmName = (pmId) => paymentMethods.find(p=>p.id===pmId)?.name || '';
+
+  let budgets=schedules.filter(s=>s.budget);
+
+  // Filter by search
+  if (searchQ.trim()) {
+    const q = searchQ.toLowerCase();
+    budgets = budgets.filter(s => {
+      const title = (s.title||'').toLowerCase();
+      const catName = (s.budget.bCatName||'').toLowerCase();
+      const pmName = getPmName(s.budget.pmId).toLowerCase();
+      return title.includes(q) || catName.includes(q) || pmName.includes(q);
+    });
+  }
+
+  const inc=budgets.filter(s=>s.budget.type==='income').reduce((a,s)=>a+s.budget.amount,0);
+  const exp=budgets.filter(s=>s.budget.type==='expense').reduce((a,s)=>a+s.budget.amount,0);
+
+  return <div style={{padding:12}}>
+    {/* Search bar */}
+    <div className="gr-memo-search" style={{marginBottom:12}}>
+      <I n="search" size={14} color="var(--gr-t3)"/>
+      <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="항목, 카테고리, 결제수단 검색..." className="gr-memo-search-input"/>
+    </div>
+    <div className="gr-budget-summary"><div className="gr-budget-box"><div className="gr-budget-label">수입</div><div className="gr-budget-val" style={{color:'var(--gr-inc)'}}>+{inc.toLocaleString()}</div></div><div className="gr-budget-box"><div className="gr-budget-label">지출</div><div className="gr-budget-val" style={{color:'var(--gr-exp)'}}>-{exp.toLocaleString()}</div></div><div className="gr-budget-box"><div className="gr-budget-label">잔액</div><div className="gr-budget-val" style={{color:inc-exp>=0?'var(--gr-inc)':'var(--gr-exp)'}}>{(inc-exp).toLocaleString()}</div></div></div>
+    {budgets.length===0?<div className="gr-cal-empty" style={{marginTop:20}}>내역이 없습니다</div>:budgets.sort((a,b)=>b.createdAt-a.createdAt).map(sc=> <div key={sc.id} className="gr-budget-row">
+      <div className="gr-budget-dot" style={{background:sc.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}/>
+      <div className="gr-budget-info">
+        <div style={{fontWeight:500}}>{sc.title}</div>
+        <div style={{fontSize:11,color:'var(--gr-t3)'}}>
+          {sc.date}
+          {sc.budget.bCatName && <span> · {sc.budget.bCatName}</span>}
+          {sc.budget.pmId && getPmName(sc.budget.pmId) && <span> · {getPmName(sc.budget.pmId)}</span>}
+        </div>
+      </div>
+      <div style={{fontWeight:700,color:sc.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}>{sc.budget.type==='income'?'+':'-'}{sc.budget.amount.toLocaleString()}원</div>
+    </div>)}
+  </div>;
 }
 
 function ToggleSection({icon,iconColor,label,on,toggle,children}){
@@ -514,18 +1179,17 @@ function ToggleSection({icon,iconColor,label,on,toggle,children}){
   </div>;
 }
 
-/* SCH_CATS는 이제 room.settings.schCats에서 관리 */
-
-function ScheduleForm({goBack,room,updateRoom,selDate,sb}){
+function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
   const st = room.settings || DEF_SETTINGS;
   const menus = room.menus;
+  const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
   const [title,setTitle]=useState('');
   const [date,setDate]=useState(selDate);
   const [time,setTime]=useState('');
   const [memo,setMemo]=useState('');
   const [color,setColor]=useState(st.schCats[0]?.color||COLORS[0]);
   const [catId,setCatId]=useState(st.schCats[0]?.id||'');
-  const [todos,setTodos]=useState([{id:uid(),text:''}]);
+  const [todos,setTodos]=useState([{id:shortId(),text:''}]);
   const [hasDday,setHasDday]=useState(false);
   const [hasRepeat,setHasRepeat]=useState(false);
   const [rpType,setRpType]=useState('daily');
@@ -537,43 +1201,44 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb}){
   const [bType,setBType]=useState('expense');
   const [bAmt,setBAmt]=useState('');
   const [bCatId,setBCatId]=useState(st.expCats[0]?.id||'');
+  const [bPmId, setBPmId] = useState(paymentMethods[0]?.id||'');
   const [images,setImages]=useState([]);
+  const [saving, setSaving] = useState(false);
   const handleImages=(e)=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setImages(p=>[...p,ev.target.result]);r.readAsDataURL(file);});};
   const removeImage=(idx)=>setImages(p=>p.filter((_,i)=>i!==idx));
 
   const selectCat = (id) => { setCatId(id); const c=st.schCats.find(x=>x.id===id); if(c) setColor(c.color); };
 
-  const save = () => {
-    if(!title.trim()) return;
+  const save = async () => {
+    if(!title.trim() || saving) return;
+    setSaving(true);
     const bCats = bType==='expense' ? st.expCats : st.incCats;
     const bCatItem = bCats.find(c=>c.id===bCatId);
     const sch = {
-      id:uid(), title:title.trim(), date, time, memo, color, catId, images, createdAt:Date.now(), createdBy:'me',
+      id:uid(), title:title.trim(), date, time, memo, color, catId, images, createdAt:Date.now(), createdBy:userId,
       todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:false})) : [],
       dday: hasDday,
       repeat: hasRepeat ? {type:rpType, interval:parseInt(rpInterval)||1, endDate:rpEnd==='date'?rpEndDate:null} : null,
       alarm: menus.alarm ? {before:alBefore, message:alMsg} : null,
-      budget: menus.budget && bAmt ? {type:bType, amount:Number(bAmt), catId:bCatId, bCatName:bCatItem?.name||''} : null,
+      budget: menus.budget && bAmt ? {type:bType, amount:Number(bAmt), catId:bCatId, bCatName:bCatItem?.name||'', pmId:bPmId} : null,
     };
-    updateRoom(room.id, r=>({...r, schedules:[...r.schedules, sch]}));
+    const savedSch = await saveSchedule(room.id, sch);
+    updateRoom(room.id, r=>({...r, schedules:[...r.schedules, savedSch]}));
+    setSaving(false);
     goBack();
   };
 
   return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
     <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 스케줄</div><div style={{width:28}}/></div>
     <div className="gr-pg-body">
-      {/* 카테고리 — 가로 스크롤 */}
       <div className="gr-pg-label" style={{marginTop:0}}>카테고리</div>
       <div className="gr-pills-scroll">{st.schCats.map(c=> <button key={c.id} className={`gr-pill-btn ${catId===c.id?'on':''}`} style={catId===c.id?{background:c.color,borderColor:c.color,color:'#fff'}:{}} onClick={()=>selectCat(c.id)}>{c.name}</button>)}</div>
-      {/* 스케줄명 */}
       <input className="gr-input lg" value={title} onChange={e=>setTitle(e.target.value)} placeholder="스케줄명을 입력하세요" autoFocus/>
-      {/* 날짜 시간 */}
       <div className="gr-form-row">
         <div className="gr-form-half"><div className="gr-pg-label"><I n="cal" size={14}/> 날짜</div><input className="gr-input" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
         <div className="gr-form-half"><div className="gr-pg-label"><I n="clock" size={14}/> 시간</div><input className="gr-input" type="time" value={time} onChange={e=>setTime(e.target.value)}/></div>
       </div>
 
-      {/* 반복 — 토글 방식 */}
       {menus.cal && <div className="gr-form-divider">
         <div className="gr-form-sec-row"><span className="gr-form-sec-title"><I n="cal" size={14} color="#8B5CF6"/> 반복</span><Toggle on={hasRepeat} toggle={()=>setHasRepeat(!hasRepeat)}/></div>
         {hasRepeat && <div style={{paddingTop:8}}>
@@ -588,35 +1253,30 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb}){
         </div>}
       </div>}
 
-      {/* 메모 */}
       {menus.memo && <div className="gr-form-divider">
         <div className="gr-pg-label" style={{marginTop:0}}>메모</div>
         <textarea className="gr-input" value={memo} onChange={e=>setMemo(e.target.value)} placeholder="메모 (선택)" rows={2} style={{resize:'none'}}/>
       </div>}
 
-      {/* 할일 */}
       {menus.todo && <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="check" size={14} color="#3B82F6"/> 할 일 체크리스트</div>
         {todos.map(t=> <div key={t.id} className="gr-todo-input-row">
-          <input className="gr-input" value={t.text} onChange={e=>setTodos(p=>p.map(x=>x.id===t.id?{...x,text:e.target.value}:x))} placeholder="할 일 입력" onKeyDown={e=>{if(e.key==='Enter') setTodos(p=>[...p,{id:uid(),text:''}]);}}/>
+          <input className="gr-input" value={t.text} onChange={e=>setTodos(p=>p.map(x=>x.id===t.id?{...x,text:e.target.value}:x))} placeholder="할 일 입력" onKeyDown={e=>{if(e.key==='Enter') setTodos(p=>[...p,{id:shortId(),text:''}]);}}/>
           {todos.length>1&&<button className="gr-icon-btn" onClick={()=>setTodos(p=>p.filter(x=>x.id!==t.id))}><I n="x" size={16} color="var(--gr-t3)"/></button>}
         </div>)}
-        <button className="gr-add-todo-btn" onClick={()=>setTodos(p=>[...p,{id:uid(),text:''}])}>+ 할 일 추가</button>
+        <button className="gr-add-todo-btn" onClick={()=>setTodos(p=>[...p,{id:shortId(),text:''}])}>+ 할 일 추가</button>
       </div>}
 
-      {/* D-day */}
       <div className="gr-form-divider">
         <div className="gr-form-sec-row"><span className="gr-form-sec-title"><I n="clock" size={14} color="#F97316"/> D-day 카운트다운</span><Toggle on={hasDday} toggle={()=>setHasDday(!hasDday)}/></div>
       </div>
 
-      {/* 알람 */}
       {menus.alarm && <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="bell" size={14} color="#EAB308"/> 알람</div>
         <div className="gr-pills-scroll">{[['10m','10분 전'],['30m','30분 전'],['1h','1시간 전'],['1d','하루 전']].map(([k,v])=> <button key={k} className={`gr-pill-btn ${alBefore===k?'on':''}`} style={alBefore===k?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setAlBefore(k)}>{v}</button>)}</div>
         <input className="gr-input" value={alMsg} onChange={e=>setAlMsg(e.target.value)} placeholder="알림 메시지 (선택)"/>
       </div>}
 
-      {/* 가계부 */}
       {menus.budget && <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="wallet" size={14} color="#22C55E"/> 가계부</div>
         <div style={{display:'flex',gap:6,marginBottom:8}}><button className={`gr-type-btn ${bType==='expense'?'on-e':''}`} onClick={()=>{setBType('expense');setBCatId(st.expCats[0]?.id||'');}}>지출</button><button className={`gr-type-btn ${bType==='income'?'on-i':''}`} onClick={()=>{setBType('income');setBCatId(st.incCats[0]?.id||'');}}>수입</button></div>
@@ -624,9 +1284,10 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb}){
         <input className="gr-input lg" type="number" value={bAmt} onChange={e=>setBAmt(e.target.value)} placeholder="0"/>
         <div className="gr-pg-label">{bType==='expense'?'지출':'수입'} 카테고리</div>
         <div className="gr-pills-scroll">{(bType==='expense'?st.expCats:st.incCats).map(c=> <button key={c.id} className={`gr-pill-btn ${bCatId===c.id?'on':''}`} style={bCatId===c.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBCatId(c.id)}>{c.name}</button>)}</div>
+        <div className="gr-pg-label">결제수단</div>
+        <div className="gr-pills-scroll">{paymentMethods.map(pm=> <button key={pm.id} className={`gr-pill-btn ${bPmId===pm.id?'on':''}`} style={bPmId===pm.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBPmId(pm.id)}>{pm.name}</button>)}</div>
       </div>}
 
-      {/* 이미지 첨부 */}
       <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="image" size={14} color="var(--gr-t2)"/> 이미지 첨부</div>
         <div className="gr-diary-upload-area">
@@ -644,19 +1305,20 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb}){
 
       <div style={{height:20}}/>
     </div>
-    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()} onClick={save}>저장하기</button></div>
+    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
   </div>;
 }
 
 const MOODS=['😊','😢','😡','😴','🥰','😎','🤔','😱','🤗','😤'];
 const WEATHERS=['☀️','⛅','🌧️','❄️','🌪️','🌈','🌙','⚡'];
 
-function DiaryForm({goBack,room,updateRoom,sb}){
+function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}){
   const [title,setTitle]=useState('');
   const [content,setContent]=useState('');
   const [images,setImages]=useState([]);
   const [mood,setMood]=useState('');
   const [weather,setWeather]=useState('');
+  const [saving,setSaving]=useState(false);
   const handleImages=(e)=>{
     const files=Array.from(e.target.files);
     files.forEach(file=>{
@@ -666,9 +1328,13 @@ function DiaryForm({goBack,room,updateRoom,sb}){
     });
   };
   const removeImage=(idx)=>setImages(prev=>prev.filter((_,i)=>i!==idx));
-  const save=()=>{
-    if(!title.trim()) return;
-    updateRoom(room.id,r=>({...r,diaries:[...r.diaries,{id:uid(),title:title.trim(),content,images,mood,weather,date:fmt(new Date()),createdAt:Date.now(),createdBy:'me',likes:[],comments:[]}]}));
+  const save=async ()=>{
+    if(!title.trim()||saving) return;
+    setSaving(true);
+    const diary = {id:uid(),title:title.trim(),content,images,mood,weather,date:fmt(new Date()),createdAt:Date.now(),createdBy:userId,likes:[],comments:[]};
+    const savedDiary = await saveDiaryDb(room.id, diary);
+    updateRoom(room.id,r=>({...r,diaries:[...r.diaries,savedDiary]}));
+    setSaving(false);
     goBack();
   };
   return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
@@ -695,7 +1361,7 @@ function DiaryForm({goBack,room,updateRoom,sb}){
       <div className="gr-pg-label">내용</div>
       <textarea className="gr-input" value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘의 일기를 작성하세요" rows={6} style={{resize:'none'}}/>
     </div>
-    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()} onClick={save}>저장하기</button></div>
+    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
   </div>;
 }
 
@@ -704,20 +1370,64 @@ function SimpleForm({title:pt,fields,goBack,onSave,sb}){
   return <div style={{display:'flex',flexDirection:'column',height:'100%'}}><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">{pt}</div><div style={{width:28}}/></div><div className="gr-pg-body">{fields.map((f,i)=> <div key={f.k} style={{marginBottom:12}}><div className="gr-pg-label">{f.l}</div>{f.type==='textarea'?<textarea className="gr-input" value={vals[f.k]} onChange={e=>setVals(p=>({...p,[f.k]:e.target.value}))} placeholder={f.l} rows={4} style={{resize:'none'}}/>:<input className="gr-input" value={vals[f.k]} onChange={e=>setVals(p=>({...p,[f.k]:e.target.value}))} placeholder={f.l} autoFocus={i===0}/>}</div>)}</div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!vals[fields[0].k]?.trim()} onClick={()=>onSave(vals)}>저장하기</button></div></div>;
 }
 
-function BudgetForm({goBack,room,updateRoom,sb}){
+function BudgetForm({goBack,room,updateRoom,sb,saveSchedule,userId}){
+  const st = room.settings || DEF_SETTINGS;
+  const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
   const [title,setTitle]=useState(''); const [amount,setAmount]=useState(''); const [type,setType]=useState('expense');
-  const save=()=>{if(!title.trim()||!amount) return;updateRoom(room.id,r=>({...r,schedules:[...r.schedules,{id:uid(),title:title.trim(),date:fmt(new Date()),time:'',memo:'',color:type==='income'?'#3182F6':'#F04452',budget:{type,amount:Number(amount)},createdAt:Date.now()}]}));goBack();};
-  return <div style={{display:'flex',flexDirection:'column',height:'100%'}}><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">가계부 추가</div><div style={{width:28}}/></div><div className="gr-pg-body"><div style={{display:'flex',gap:6,marginBottom:16}}><button className={`gr-type-btn ${type==='expense'?'on-e':''}`} onClick={()=>setType('expense')}>지출</button><button className={`gr-type-btn ${type==='income'?'on-i':''}`} onClick={()=>setType('income')}>수입</button></div><div className="gr-pg-label">항목명</div><input className="gr-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="예: 점심식사" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">금액 (원)</div><input className="gr-input lg" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0"/></div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||!amount} onClick={save}>저장하기</button></div></div>;
+  const [bCatId,setBCatId]=useState(st.expCats[0]?.id||'');
+  const [bPmId,setBPmId]=useState(paymentMethods[0]?.id||'');
+  const [saving,setSaving]=useState(false);
+
+  const save=async ()=>{
+    if(!title.trim()||!amount||saving) return;
+    setSaving(true);
+    const bCats = type==='expense' ? st.expCats : st.incCats;
+    const bCatItem = bCats.find(c=>c.id===bCatId);
+    const sch = {
+      id:uid(),title:title.trim(),date:fmt(new Date()),time:'',memo:'',
+      color:type==='income'?'#3182F6':'#F04452',
+      budget:{type,amount:Number(amount),catId:bCatId,bCatName:bCatItem?.name||'',pmId:bPmId},
+      createdAt:Date.now(),createdBy:userId,images:[],todos:[],
+    };
+    const savedSch = await saveSchedule(room.id, sch);
+    updateRoom(room.id,r=>({...r,schedules:[...r.schedules,savedSch]}));
+    setSaving(false);
+    goBack();
+  };
+  return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">가계부 추가</div><div style={{width:28}}/></div>
+    <div className="gr-pg-body">
+      <div style={{display:'flex',gap:6,marginBottom:16}}><button className={`gr-type-btn ${type==='expense'?'on-e':''}`} onClick={()=>{setType('expense');setBCatId(st.expCats[0]?.id||'');}}>지출</button><button className={`gr-type-btn ${type==='income'?'on-i':''}`} onClick={()=>{setType('income');setBCatId(st.incCats[0]?.id||'');}}>수입</button></div>
+      <div className="gr-pg-label">항목명</div>
+      <input className="gr-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="예: 점심식사" autoFocus style={{marginBottom:12}}/>
+      <div className="gr-pg-label">금액 (원)</div>
+      <input className="gr-input lg" type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0"/>
+      <div className="gr-pg-label">{type==='expense'?'지출':'수입'} 카테고리</div>
+      <div className="gr-pills-scroll">{(type==='expense'?st.expCats:st.incCats).map(c=> <button key={c.id} className={`gr-pill-btn ${bCatId===c.id?'on':''}`} style={bCatId===c.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBCatId(c.id)}>{c.name}</button>)}</div>
+      <div className="gr-pg-label">결제수단</div>
+      <div className="gr-pills-scroll">{paymentMethods.map(pm=> <button key={pm.id} className={`gr-pill-btn ${bPmId===pm.id?'on':''}`} style={bPmId===pm.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBPmId(pm.id)}>{pm.name}</button>)}</div>
+    </div>
+    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||!amount||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
+  </div>;
 }
 
-function AddRoomPage({goBack,setRooms,sb,friends}){
+function AddRoomPage({goBack,setRooms,sb,friends,createRoom,userId}){
   const [name,setName]=useState(''); const [desc,setDesc]=useState(''); const [isPublic,setIsPublic]=useState(true);
   const [menus,setMenus]=useState({cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true});
   const [selMembers,setSelMembers]=useState([]);
+  const [saving,setSaving]=useState(false);
   const toggleMenu=(id)=>setMenus(p=>({...p,[id]:!p[id]}));
   const toggleMember=(fid)=>setSelMembers(p=>p.includes(fid)?p.filter(x=>x!==fid):[...p,fid]);
-  const save=()=>{if(!name.trim()) return;setRooms(p=>[...p,{id:uid(),name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,members:['me',...selMembers],newCount:0,nearestSchedule:null,menus,schedules:[],memos:[],todos:[],diaries:[]}]);goBack();};
-  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 캘린더방</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">캘린더명</div><input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">설명</div><input className="gr-input" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="설명" style={{marginBottom:12}}/><div className="gr-pg-label">공개 여부</div><div style={{display:'flex',gap:8,marginBottom:16}}><button className={`gr-pill ${isPublic?'on':''}`} style={isPublic?{background:'var(--gr-acc)',color:'#fff'}:{}} onClick={()=>setIsPublic(true)}>공개</button><button className={`gr-pill ${!isPublic?'on':''}`} style={!isPublic?{background:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setIsPublic(false)}>비공개</button></div><div className="gr-pg-label">기능 ON/OFF</div>{ALL_MENUS.map(m=> <div key={m.id} className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={menus[m.id]} toggle={()=>toggleMenu(m.id)}/></div>)}<div className="gr-pg-label" style={{marginTop:16}}>멤버 초대 (선택)</div>{friends.map(f=> <div key={f.id} className="gr-friend-row" style={{padding:'8px 0'}} onClick={()=>toggleMember(f.id)}><Avatar name={f.nickname} size={32}/><div className="gr-friend-info"><div className="gr-friend-name" style={{fontSize:13}}>{f.nickname}</div></div><div className={`gr-todo-cb ${selMembers.includes(f.id)?'done':''}`} style={{width:20,height:20}}>{selMembers.includes(f.id)&&<I n="check" size={12} color="#fff"/>}</div></div>)}</div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!name.trim()} onClick={save}>만들기</button></div></div>;
+  const save=async ()=>{
+    if(!name.trim()||saving) return;
+    setSaving(true);
+    const roomData = {name:name.trim(),desc:desc.trim(),isPublic,menus,members:[userId,...selMembers]};
+    const roomId = await createRoom(roomData);
+    setRooms(p=>[...p,{id:roomId,name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,members:[userId,...selMembers],newCount:0,nearestSchedule:null,menus,settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]}]);
+    setSaving(false);
+    goBack();
+  };
+  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 캘린더방</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">캘린더명</div><input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">설명</div><input className="gr-input" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="설명" style={{marginBottom:12}}/><div className="gr-pg-label">공개 여부</div><div style={{display:'flex',gap:8,marginBottom:16}}><button className={`gr-pill ${isPublic?'on':''}`} style={isPublic?{background:'var(--gr-acc)',color:'#fff'}:{}} onClick={()=>setIsPublic(true)}>공개</button><button className={`gr-pill ${!isPublic?'on':''}`} style={!isPublic?{background:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setIsPublic(false)}>비공개</button></div><div className="gr-pg-label">기능 ON/OFF</div>{ALL_MENUS.map(m=> <div key={m.id} className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={menus[m.id]} toggle={()=>toggleMenu(m.id)}/></div>)}<div className="gr-pg-label" style={{marginTop:16}}>멤버 초대 (선택)</div>{friends.map(f=> <div key={f.id} className="gr-friend-row" style={{padding:'8px 0'}} onClick={()=>toggleMember(f.id)}><Avatar name={f.nickname} size={32} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name" style={{fontSize:13}}>{f.nickname}</div></div><div className={`gr-todo-cb ${selMembers.includes(f.id)?'done':''}`} style={{width:20,height:20}}>{selMembers.includes(f.id)&&<I n="check" size={12} color="#fff"/>}</div></div>)}</div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!name.trim()||saving} onClick={save}>{saving?'만드는중...':'만들기'}</button></div></div>;
 }
 
 const CSS = `
@@ -798,7 +1508,7 @@ const CSS = `
 .gr-pg-body{flex:1;overflow-y:auto;padding:16px 20px}.gr-pg-body::-webkit-scrollbar{width:0}
 .gr-pg-label{font-size:13px;font-weight:600;color:var(--gr-t2);margin-bottom:6px;margin-top:12px;display:flex;align-items:center;gap:6px}.gr-pg-label:first-child{margin-top:0}
 .gr-input{width:100%;padding:12px 14px;border:1px solid var(--gr-brd);border-radius:var(--gr-r-sm);font-size:14px;font-family:var(--gr-ff);outline:none;background:var(--gr-bg);color:var(--gr-text)}.gr-input:focus{border-color:var(--gr-acc)}.gr-input::placeholder{color:#ccc}.gr-input.lg{font-size:16px;font-weight:600;margin-bottom:12px}
-.gr-btn-primary{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-btn-primary:hover{background:var(--gr-acc-d)}
+.gr-btn-primary{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-btn-primary:hover{background:var(--gr-acc-d)}.gr-btn-primary:disabled{background:#eee;color:#bbb;cursor:default}
 .gr-btn-danger{width:100%;padding:12px;border-radius:var(--gr-r-sm);border:1px solid var(--gr-exp);background:none;color:var(--gr-exp);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);display:flex;align-items:center;justify-content:center;gap:6px}
 .gr-btn-copy{background:var(--gr-acc);color:#fff;border:none;padding:6px 14px;border-radius:var(--gr-r-sm);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
 .gr-btn-sm{padding:8px 16px;border-radius:var(--gr-r-sm);border:none;background:var(--gr-acc);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
