@@ -95,6 +95,7 @@ const I = ({n, size=20, color}) => {
     grid:<svg style={s} viewBox="0 0 24 24" {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>,
     copy:<svg style={s} viewBox="0 0 24 24" {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
     logout:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+    mail:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>,
     info:<svg style={s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
   };
   return icons[n] || null;
@@ -123,7 +124,226 @@ function getUserId() {
   return id;
 }
 
-export default function App(){
+/* ── LOGIN PAGE ── */
+function LoginPage({ onLogin }) {
+  const [mode, setMode] = useState('main');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleEmailLogin = async () => {
+    if (!email || !password) return setError('이메일과 비밀번호를 입력하세요');
+    setLoading(true); setError('');
+    try {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
+      if (err) throw err;
+      const user = { id: data.user.id, email: data.user.email, nickname: data.user.user_metadata?.name || email.split('@')[0] };
+      localStorage.setItem('goroom_user_id', user.id);
+      onLogin(user);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  const handleEmailSignup = async () => {
+    if (!email || !password || !nickname) return setError('모든 항목을 입력하세요');
+    if (password.length < 6) return setError('비밀번호는 6자 이상이어야 합니다');
+    setLoading(true); setError('');
+    try {
+      const { data, error: err } = await supabase.auth.signUp({ email, password, options: { data: { name: nickname } } });
+      if (err) throw err;
+      if (data.session) {
+        const user = { id: data.user.id, email: data.user.email, nickname };
+        localStorage.setItem('goroom_user_id', user.id);
+        onLogin(user);
+      } else {
+        setError('가입 완료! 이메일 인증 후 로그인해주세요.');
+      }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  const handleSocialLogin = (provider) => {
+    setError(`${provider === 'google' ? '구글' : '카카오'} 로그인은 준비 중입니다. 이메일로 가입해주세요.`);
+  };
+
+  const handlePinLogin = () => {
+    setError('PIN 로그인은 이메일 가입 후 설정에서 등록할 수 있습니다.');
+  };
+
+  if (mode === 'main') return (
+    <div className="gr-login-wrap">
+      <div className="gr-login-card">
+        <div className="gr-login-logo">
+          <div className="gr-login-logo-icon">구</div>
+          <div className="gr-login-logo-text">구<span>롬</span></div>
+          <div className="gr-login-subtitle">스케줄 · 가계부 · 메모</div>
+        </div>
+        <div className="gr-login-buttons">
+          <button className="gr-login-btn gr-login-btn-email" onClick={() => setMode('email-login')}>
+            <I n="mail" size={18}/> <span>이메일로 시작하기</span>
+          </button>
+          <button className="gr-login-btn gr-login-btn-google" onClick={() => handleSocialLogin('google')}>
+            <svg style={{width:18,height:18}} viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            <span>구글로 시작하기</span>
+          </button>
+          <button className="gr-login-btn gr-login-btn-kakao" onClick={() => handleSocialLogin('kakao')}>
+            <svg style={{width:18,height:18}} viewBox="0 0 24 24" fill="#3C1E1E"><path d="M12 3C6.48 3 2 6.58 2 10.94c0 2.8 1.86 5.27 4.66 6.67l-1.18 4.36c-.1.36.32.64.64.43l5.08-3.35c.26.02.53.03.8.03 5.52 0 10-3.58 10-7.94S17.52 3 12 3z"/></svg>
+            <span>카카오로 시작하기</span>
+          </button>
+          <div className="gr-login-divider"><span>또는</span></div>
+          <button className="gr-login-btn gr-login-btn-pin" onClick={() => setMode('pin')}>
+            <I n="pin" size={18}/> <span>PIN 코드로 로그인</span>
+          </button>
+        </div>
+        <div className="gr-login-footer">
+          아직 계정이 없나요? <button className="gr-login-link" onClick={() => setMode('email-signup')}>회원가입</button>
+        </div>
+      </div>
+      <div className="gr-login-platform-badge">
+        {window.innerWidth >= 768 ? '💻 데스크톱' : '📱 모바일'} · 모든 기기에서 동기화
+      </div>
+    </div>
+  );
+
+  if (mode === 'email-login') return (
+    <div className="gr-login-wrap">
+      <div className="gr-login-card">
+        <button className="gr-login-back" onClick={() => { setMode('main'); setError(''); }}><I n="back" size={20}/></button>
+        <div className="gr-login-logo" style={{marginBottom:24}}>
+          <div className="gr-login-logo-text" style={{fontSize:24}}>이메일 로그인</div>
+        </div>
+        {error && <div className="gr-login-error">{error}</div>}
+        <div className="gr-login-form">
+          <div className="gr-login-field">
+            <I n="mail" size={16} color="#999"/>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일 주소" autoFocus/>
+          </div>
+          <div className="gr-login-field">
+            <I n="lock" size={16} color="#999"/>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호" onKeyDown={e => e.key === 'Enter' && handleEmailLogin()}/>
+          </div>
+          <button className="gr-login-submit" onClick={handleEmailLogin} disabled={loading}>
+            {loading ? '로그인 중...' : '로그인'}
+          </button>
+        </div>
+        <div className="gr-login-footer">
+          계정이 없나요? <button className="gr-login-link" onClick={() => { setMode('email-signup'); setError(''); }}>회원가입</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (mode === 'email-signup') return (
+    <div className="gr-login-wrap">
+      <div className="gr-login-card">
+        <button className="gr-login-back" onClick={() => { setMode('main'); setError(''); }}><I n="back" size={20}/></button>
+        <div className="gr-login-logo" style={{marginBottom:24}}>
+          <div className="gr-login-logo-text" style={{fontSize:24}}>회원가입</div>
+        </div>
+        {error && <div className="gr-login-error">{error}</div>}
+        <div className="gr-login-form">
+          <div className="gr-login-field">
+            <I n="user" size={16} color="#999"/>
+            <input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="닉네임" autoFocus/>
+          </div>
+          <div className="gr-login-field">
+            <I n="mail" size={16} color="#999"/>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="이메일 주소"/>
+          </div>
+          <div className="gr-login-field">
+            <I n="lock" size={16} color="#999"/>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호 (6자 이상)" onKeyDown={e => e.key === 'Enter' && handleEmailSignup()}/>
+          </div>
+          <button className="gr-login-submit" onClick={handleEmailSignup} disabled={loading}>
+            {loading ? '가입 중...' : '가입하기'}
+          </button>
+        </div>
+        <div className="gr-login-footer">
+          이미 계정이 있나요? <button className="gr-login-link" onClick={() => { setMode('email-login'); setError(''); }}>로그인</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (mode === 'pin') return (
+    <div className="gr-login-wrap">
+      <div className="gr-login-card">
+        <button className="gr-login-back" onClick={() => { setMode('main'); setError(''); setPin(''); }}><I n="back" size={20}/></button>
+        <div className="gr-login-logo" style={{marginBottom:24}}>
+          <div className="gr-login-logo-text" style={{fontSize:24}}>PIN 로그인</div>
+          <div className="gr-login-subtitle">4~6자리 숫자를 입력하세요</div>
+        </div>
+        {error && <div className="gr-login-error">{error}</div>}
+        <div className="gr-pin-dots">
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} className={`gr-pin-dot ${i < pin.length ? 'filled' : ''}`}/>
+          ))}
+        </div>
+        <div className="gr-pin-pad">
+          {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((v, i) => (
+            <button key={i} className={`gr-pin-key ${v === '' ? 'empty' : ''}`}
+              onClick={() => {
+                if (v === '⌫') setPin(p => p.slice(0, -1));
+                else if (typeof v === 'number' && pin.length < 6) setPin(p => p + String(v));
+              }}>
+              {v}
+            </button>
+          ))}
+        </div>
+        <button className="gr-login-submit" onClick={handlePinLogin} disabled={loading || pin.length < 4} style={{marginTop:16}}>
+          {loading ? '확인 중...' : '확인'}
+        </button>
+      </div>
+    </div>
+  );
+
+  return null;
+}
+
+/* ── AUTH WRAPPER ── */
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const u = session.user;
+        localStorage.setItem('goroom_user_id', u.id);
+        setUser({ id: u.id, email: u.email, nickname: u.user_metadata?.name || u.email?.split('@')[0] || '나' });
+      }
+      setAuthChecked(true);
+    });
+  }, []);
+
+  const handleLogin = (u) => setUser(u);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem('goroom_user_id');
+    setUser(null);
+  };
+
+  if (!authChecked) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
+      <style>{CSS}</style>
+      <div className="gr-loading-spinner"/>
+    </div>
+  );
+
+  if (!user) return (
+    <>
+      <style>{CSS}</style>
+      <LoginPage onLogin={handleLogin}/>
+    </>
+  );
+
+  return <AppMain authUser={user} onLogout={handleLogout}/>;
+}
+
+function AppMain({ authUser, onLogout }){
   const bp = useBreakpoint();
   const isWide = bp === 'desktop' || bp === 'tablet';
   const [tab, setTab] = useState('friends');
@@ -211,6 +431,7 @@ export default function App(){
               desc: r.description || '',
               isPersonal: r.is_personal || false,
               isPublic: r.is_public !== false,
+              thumbnailUrl: r.thumbnail_url || '',
               members: (allMembers || []).map(m => m.user_id),
               newCount: 0,
               nearestSchedule: null,
@@ -476,11 +697,20 @@ export default function App(){
   const createRoom = async (roomData) => {
     const roomId = uid();
     try {
+      let thumbnailUrl = '';
+      if (roomData.thumbnailFile) {
+        const blob = await fileToBlob(roomData.thumbnailFile);
+        if (blob) {
+          const path = `calendar/${roomId}/thumbnail_${Date.now()}.jpg`;
+          thumbnailUrl = await uploadFile(path, blob) || '';
+        }
+      }
       await supabase.from('goroom_rooms').insert({
         id: roomId, owner_id: userId, name: roomData.name, description: roomData.desc || '',
         is_personal: false, is_public: roomData.isPublic,
         menus: roomData.menus,
         settings: DEF_SETTINGS,
+        thumbnail_url: thumbnailUrl || null,
       });
       // Add owner
       await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' });
@@ -528,7 +758,7 @@ export default function App(){
   };
 
   if (loading) {
-    return <div className="gr-root"><style>{CSS}</style><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:12}}><div style={{fontSize:32}}>🏠</div><div style={{color:'#999',fontSize:14}}>로딩중...</div></div></div>;
+    return <div className="gr-root"><style>{CSS}</style><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><div className="gr-loading-spinner"/></div></div>;
   }
 
   const renderDetail = () => {
@@ -568,7 +798,7 @@ export default function App(){
         await saveProfile(me);
       };
       return <div className="gr-panel">
-        <div className="gr-profile-bg" style={{background:me.profileBg?`url(${me.profileBg}) center/cover`:'linear-gradient(135deg,#F5A928 0%,#F09819 100%)'}}>
+        <div className="gr-profile-bg" style={{background:me.profileBg?`url(${me.profileBg}) center/cover`:'linear-gradient(135deg,#FEE500 0%,#F5D800 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff',zIndex:3}}><I n="back" size={20}/></button>}
           <div className="gr-profile-top-bar">
             {editProfile && <label className="gr-profile-top-btn-s"><I n="camera" size={16} color="#333"/> 배경<input type="file" accept="image/*" onChange={e=>handleImg(e,'profileBg')} style={{display:'none'}}/></label>}
@@ -599,7 +829,7 @@ export default function App(){
       return <div className="gr-panel">
         <div className="gr-profile-bg" style={{background:f.profileBg?`url(${f.profileBg}) center/cover`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff'}}><I n="back" size={20}/></button>}
-          <button className="gr-profile-fav-btn" onClick={()=>toggleFav(f.id)}>{f.favorite?<I n="starFill" size={22} color="#F5A928"/>:<I n="star" size={22} color="#fff"/>}</button>
+          <button className="gr-profile-fav-btn" onClick={()=>toggleFav(f.id)}>{f.favorite?<I n="starFill" size={22} color="#FEE500"/>:<I n="star" size={22} color="#fff"/>}</button>
         </div>
         <div className="gr-profile-info">
           <div className="gr-profile-avatar">{f.profileImg?<img src={f.profileImg} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}} alt=""/>:<Avatar name={f.nickname} size={80}/>}</div>
@@ -611,9 +841,10 @@ export default function App(){
       </div>;
     }
 
+    if(page==='my-info') return <MyInfoPage goBack={goBack} sb={sb} me={me} setMe={setMe} saveProfile={saveProfile} authUser={authUser}/>;
     if(page==='add-friend') return <AddFriendPage goBack={goBack} me={me} addFriendByCode={addFriendByCode} sb={sb}/>;
     if(page==='notification-settings') return <NotificationSettings goBack={goBack} sb={sb}/>;
-    if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId}/>;
+    if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId} onLogout={onLogout}/>;
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId); if(!room) return null;
@@ -642,13 +873,13 @@ export default function App(){
               {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               <div className="gr-section-label">친구 {filtered.length}</div>
-              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#F5A928"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
+              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#FEE500"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
             </div>;
           })()}
         </div></>}
-      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setPage('add-room')}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
+      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setPage('add-room')}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined} src={r.thumbnailUrl}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
       {tab==='more'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">더보기</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body" style={{padding:20}}>
-        <div className="gr-more-item" onClick={()=>openProfile(userId)}><I n="user" size={20}/><span>내 프로필</span></div>
+        <div className="gr-more-item" onClick={()=>setPage('my-info')}><I n="info" size={20}/><span>내 정보</span></div>
         <div className="gr-more-item" onClick={()=>setPage('add-friend')}><I n="link" size={20}/><span>친구 추가 코드</span></div>
         <div className="gr-more-item" onClick={()=>setPage('notification-settings')}><I n="bell" size={20}/><span>알림 설정</span></div>
         <div className="gr-more-item" onClick={()=>setPage('app-settings')}><I n="gear" size={20}/><span>설정</span></div>
@@ -707,16 +938,145 @@ function NotificationSettings({goBack, sb}) {
   </div>;
 }
 
+/* ── 더보기 > 내 정보 ── */
+function MyInfoPage({goBack, sb, me, setMe, saveProfile, authUser}) {
+  const [birthday, setBirthday] = useState(me.birthday || '');
+  const [editBday, setEditBday] = useState(false);
+  const [savingBday, setSavingBday] = useState(false);
+
+  const [pwMode, setPwMode] = useState(false);
+  const [curPw, setCurPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwMsg, setPwMsg] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const [snsMsg, setSnsMsg] = useState('');
+
+  const saveBirthday = async () => {
+    setSavingBday(true);
+    const updated = { ...me, birthday };
+    await saveProfile(updated);
+    setSavingBday(false);
+    setEditBday(false);
+  };
+
+  const changePassword = async () => {
+    if (!newPw || !confirmPw) return setPwMsg('새 비밀번호를 입력하세요.');
+    if (newPw.length < 6) return setPwMsg('비밀번호는 6자 이상이어야 합니다.');
+    if (newPw !== confirmPw) return setPwMsg('새 비밀번호가 일치하지 않습니다.');
+    setPwLoading(true); setPwMsg('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      setPwMsg('비밀번호가 변경되었습니다.');
+      setCurPw(''); setNewPw(''); setConfirmPw('');
+      setTimeout(() => { setPwMsg(''); setPwMode(false); }, 1500);
+    } catch (e) { setPwMsg(e.message); }
+    setPwLoading(false);
+  };
+
+  const handleSnsLink = (provider) => {
+    setSnsMsg(`${provider} 연동은 준비 중입니다.`);
+    setTimeout(() => setSnsMsg(''), 2000);
+  };
+
+  const displayBday = birthday ? `${birthday.slice(5,7)}월 ${birthday.slice(8,10)}일` : '미설정';
+
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">내 정보</div><div style={{width:28}}/></div>
+    <div className="gr-pg-body">
+
+      {/* 계정 정보 */}
+      <div className="gr-pg-label">계정 정보</div>
+      <div className="gr-myinfo-card">
+        <div className="gr-myinfo-row">
+          <span className="gr-myinfo-label"><I n="mail" size={14} color="var(--gr-t3)"/> 이메일</span>
+          <span className="gr-myinfo-val">{authUser?.email || '없음'}</span>
+        </div>
+        <div className="gr-myinfo-row">
+          <span className="gr-myinfo-label"><I n="user" size={14} color="var(--gr-t3)"/> 닉네임</span>
+          <span className="gr-myinfo-val">{me.nickname}</span>
+        </div>
+        <div className="gr-myinfo-row">
+          <span className="gr-myinfo-label"><I n="link" size={14} color="var(--gr-t3)"/> 친구 코드</span>
+          <span className="gr-myinfo-val" style={{fontSize:12}}>{me.linkCode}</span>
+        </div>
+      </div>
+
+      {/* 생일 */}
+      <div className="gr-pg-label" style={{marginTop:20}}>생일</div>
+      <div className="gr-myinfo-card">
+        {editBday ? <div>
+          <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:8}}>생일은 내 캘린더와 친구 목록에서 해당 날짜에 노출됩니다.</div>
+          <input type="date" className="gr-input" value={birthday} onChange={e=>setBirthday(e.target.value)} style={{marginBottom:8}}/>
+          <div style={{display:'flex',gap:6}}>
+            <button className="gr-btn-sm" onClick={saveBirthday} disabled={savingBday}>{savingBday?'저장중...':'저장'}</button>
+            <button className="gr-btn-sm-outline" onClick={()=>{setBirthday(me.birthday||'');setEditBday(false);}}>취소</button>
+          </div>
+        </div> : <div className="gr-myinfo-row" style={{cursor:'pointer'}} onClick={()=>setEditBday(true)}>
+          <span className="gr-myinfo-label"><I n="cal" size={14} color="var(--gr-t3)"/> 생일</span>
+          <span className="gr-myinfo-val">{displayBday} <I n="edit" size={12} color="var(--gr-t3)"/></span>
+        </div>}
+      </div>
+
+      {/* 비밀번호 변경 */}
+      <div className="gr-pg-label" style={{marginTop:20}}>보안</div>
+      <div className="gr-myinfo-card">
+        {pwMode ? <div>
+          {pwMsg && <div className={`gr-login-error`} style={{marginBottom:8}}>{pwMsg}</div>}
+          <div className="gr-login-field" style={{marginBottom:8}}>
+            <I n="lock" size={14} color="#999"/>
+            <input type="password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="새 비밀번호 (6자 이상)"/>
+          </div>
+          <div className="gr-login-field" style={{marginBottom:8}}>
+            <I n="lock" size={14} color="#999"/>
+            <input type="password" value={confirmPw} onChange={e=>setConfirmPw(e.target.value)} placeholder="새 비밀번호 확인" onKeyDown={e=>e.key==='Enter'&&changePassword()}/>
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button className="gr-btn-sm" onClick={changePassword} disabled={pwLoading}>{pwLoading?'변경중...':'변경'}</button>
+            <button className="gr-btn-sm-outline" onClick={()=>{setPwMode(false);setPwMsg('');setNewPw('');setConfirmPw('');}}>취소</button>
+          </div>
+        </div> : <div className="gr-myinfo-row" style={{cursor:'pointer'}} onClick={()=>setPwMode(true)}>
+          <span className="gr-myinfo-label"><I n="lock" size={14} color="var(--gr-t3)"/> 비밀번호 변경</span>
+          <span className="gr-myinfo-val"><I n="right" size={14} color="var(--gr-t3)"/></span>
+        </div>}
+      </div>
+
+      {/* SNS 연동 */}
+      <div className="gr-pg-label" style={{marginTop:20}}>SNS 연동</div>
+      {snsMsg && <div className="gr-login-error" style={{marginBottom:8}}>{snsMsg}</div>}
+      <div className="gr-myinfo-card">
+        <div className="gr-myinfo-row" style={{cursor:'pointer'}} onClick={()=>handleSnsLink('구글')}>
+          <span className="gr-myinfo-label">
+            <svg style={{width:14,height:14,verticalAlign:'middle'}} viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            {' '}구글
+          </span>
+          <span className="gr-myinfo-val" style={{color:'var(--gr-t3)',fontSize:12}}>미연동 <I n="right" size={14} color="var(--gr-t3)"/></span>
+        </div>
+        <div className="gr-myinfo-row" style={{cursor:'pointer'}} onClick={()=>handleSnsLink('카카오')}>
+          <span className="gr-myinfo-label">
+            <svg style={{width:14,height:14,verticalAlign:'middle'}} viewBox="0 0 24 24" fill="#3C1E1E"><path d="M12 3C6.48 3 2 6.58 2 10.94c0 2.8 1.86 5.27 4.66 6.67l-1.18 4.36c-.1.36.32.64.64.43l5.08-3.35c.26.02.53.03.8.03 5.52 0 10-3.58 10-7.94S17.52 3 12 3z"/></svg>
+            {' '}카카오
+          </span>
+          <span className="gr-myinfo-val" style={{color:'var(--gr-t3)',fontSize:12}}>미연동 <I n="right" size={14} color="var(--gr-t3)"/></span>
+        </div>
+      </div>
+
+    </div>
+  </div>;
+}
+
 /* ── 더보기 > 설정 ── */
-function AppSettings({goBack, sb, userId}) {
+function AppSettings({goBack, sb, userId, onLogout}) {
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('goroom_user_id');
+  const handleLogout = async () => {
     localStorage.removeItem('gr_noti_schedule');
     localStorage.removeItem('gr_noti_friend');
     localStorage.removeItem('gr_noti_feed');
-    window.location.reload();
+    if (onLogout) { await onLogout(); }
+    else { localStorage.removeItem('goroom_user_id'); window.location.reload(); }
   };
 
   const handleReset = async () => {
@@ -799,7 +1159,7 @@ function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,upda
   if(subPage==='add-diary') return <div className="gr-panel"><DiaryForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveDiaryDb={saveDiary} userId={userId}/></div>;
   if(subPage==='add-budget') return <div className="gr-panel"><BudgetForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveSchedule={saveSchedule} userId={userId}/></div>;
   const fabMap={cal:'add-schedule',memo:'add-memo',todo:'add-todo',diary:'add-diary',budget:'add-budget'};
-  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom} deleteMemoDb={deleteMemo} updateMemoPinDb={updateMemoPin}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName} deleteTodoDb={deleteTodo} updateTodoDoneDb={updateTodoDone} userId={userId}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} userId={userId}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules} room={room}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#fff"/></button>}</div>;
+  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom} deleteMemoDb={deleteMemo} updateMemoPinDb={updateMemoPin}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName} deleteTodoDb={deleteTodo} updateTodoDoneDb={updateTodoDone} userId={userId}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} userId={userId}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules} room={room}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#191919"/></button>}</div>;
 }
 
 function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,updateRoomInDb,deleteRoom,userId}){
@@ -807,8 +1167,33 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
   const [addCatName,setAddCatName]=useState(''); const [addCatColor,setAddCatColor]=useState('#4A90D9');
   const [addExpName,setAddExpName]=useState(''); const [addIncName,setAddIncName]=useState('');
   const [addPmName, setAddPmName] = useState(''); const [addPmType, setAddPmType] = useState('card');
+  const [thumbPreview,setThumbPreview]=useState(room.thumbnailUrl||'');
+  const [thumbUploading,setThumbUploading]=useState(false);
+  const thumbRef=useRef(null);
   const st = room.settings || DEF_SETTINGS;
   const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
+
+  const handleThumbChange=async(e)=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    setThumbUploading(true);
+    try {
+      const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`calendar/${room.id}`, { search: 'thumbnail_' });
+      if(oldFiles&&oldFiles.length>0) await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(x=>`calendar/${room.id}/${x.name}`));
+      const path=`calendar/${room.id}/thumbnail_${Date.now()}.jpg`;
+      const url=await uploadFile(path,f);
+      if(url){setThumbPreview(url);updateRoom(room.id,r=>({...r,thumbnailUrl:url}));await updateRoomInDb(room.id,{thumbnail_url:url});}
+    }catch(err){console.error(err);}
+    setThumbUploading(false);
+  };
+  const handleThumbRemove=async()=>{
+    setThumbUploading(true);
+    try{
+      const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`calendar/${room.id}`, { search: 'thumbnail_' });
+      if(oldFiles&&oldFiles.length>0) await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(x=>`calendar/${room.id}/${x.name}`));
+      setThumbPreview('');updateRoom(room.id,r=>({...r,thumbnailUrl:''}));await updateRoomInDb(room.id,{thumbnail_url:null});
+    }catch(err){console.error(err);}
+    setThumbUploading(false);
+  };
 
   const saveInfo=async ()=>{
     const newName = name.trim()||room.name;
@@ -855,6 +1240,9 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
   return <div className="gr-panel">
     <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">캘린더 설정</div><div style={{width:28}}/></div>
     <div className="gr-pg-body">
+      <div className="gr-pg-label">썸네일 이미지</div>
+      <div className="gr-thumb-upload" onClick={()=>!thumbUploading&&thumbRef.current?.click()}>{thumbPreview?<><img src={thumbPreview} alt="" className="gr-thumb-img"/><button className="gr-thumb-remove" onClick={e=>{e.stopPropagation();handleThumbRemove();}}><I n="x" size={14} color="#fff"/></button></>:<div className="gr-thumb-placeholder"><I n="image" size={28} color="var(--gr-t3)"/><span style={{fontSize:12,color:'var(--gr-t3)',marginTop:4}}>{thumbUploading?'업로드중...':'이미지 선택'}</span></div>}</div>
+      <input ref={thumbRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleThumbChange}/>
       <div className="gr-pg-label">캘린더 정보 {!editing&&<button className="gr-icon-btn-sm" onClick={()=>setEditing(true)}><I n="edit" size={14}/></button>}</div>
       {editing ? <div>
         <input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={{marginBottom:8}}/>
@@ -866,7 +1254,7 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
       </div>}
       <div className="gr-set-row"><span className="gr-set-label">공개</span><Toggle on={room.isPublic} toggle={handleTogglePublic}/></div>
 
-      <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#fff"/> 초대</button></div>
+      <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#191919"/> 초대</button></div>
       {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!==userId&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
 
       <div className="gr-pg-label" style={{marginTop:20}}>기능 ON/OFF</div>
@@ -1416,22 +1804,27 @@ function AddRoomPage({goBack,setRooms,sb,friends,createRoom,userId}){
   const [menus,setMenus]=useState({cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true});
   const [selMembers,setSelMembers]=useState([]);
   const [saving,setSaving]=useState(false);
+  const [thumbPreview,setThumbPreview]=useState(null);
+  const [thumbFile,setThumbFile]=useState(null);
+  const thumbRef=useRef(null);
+  const handleThumb=(e)=>{const f=e.target.files?.[0]; if(!f) return; setThumbFile(f); const r=new FileReader(); r.onload=ev=>setThumbPreview(ev.target.result); r.readAsDataURL(f);};
+  const removeThumb=()=>{setThumbPreview(null);setThumbFile(null);if(thumbRef.current)thumbRef.current.value='';};
   const toggleMenu=(id)=>setMenus(p=>({...p,[id]:!p[id]}));
   const toggleMember=(fid)=>setSelMembers(p=>p.includes(fid)?p.filter(x=>x!==fid):[...p,fid]);
   const save=async ()=>{
     if(!name.trim()||saving) return;
     setSaving(true);
-    const roomData = {name:name.trim(),desc:desc.trim(),isPublic,menus,members:[userId,...selMembers]};
+    const roomData = {name:name.trim(),desc:desc.trim(),isPublic,menus,members:[userId,...selMembers],thumbnailFile:thumbFile};
     const roomId = await createRoom(roomData);
-    setRooms(p=>[...p,{id:roomId,name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,members:[userId,...selMembers],newCount:0,nearestSchedule:null,menus,settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]}]);
+    setRooms(p=>[...p,{id:roomId,name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,thumbnailUrl:thumbPreview||'',members:[userId,...selMembers],newCount:0,nearestSchedule:null,menus,settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]}]);
     setSaving(false);
     goBack();
   };
-  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 캘린더방</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">캘린더명</div><input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">설명</div><input className="gr-input" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="설명" style={{marginBottom:12}}/><div className="gr-pg-label">공개 여부</div><div style={{display:'flex',gap:8,marginBottom:16}}><button className={`gr-pill ${isPublic?'on':''}`} style={isPublic?{background:'var(--gr-acc)',color:'#fff'}:{}} onClick={()=>setIsPublic(true)}>공개</button><button className={`gr-pill ${!isPublic?'on':''}`} style={!isPublic?{background:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setIsPublic(false)}>비공개</button></div><div className="gr-pg-label">기능 ON/OFF</div>{ALL_MENUS.map(m=> <div key={m.id} className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={menus[m.id]} toggle={()=>toggleMenu(m.id)}/></div>)}<div className="gr-pg-label" style={{marginTop:16}}>멤버 초대 (선택)</div>{friends.map(f=> <div key={f.id} className="gr-friend-row" style={{padding:'8px 0'}} onClick={()=>toggleMember(f.id)}><Avatar name={f.nickname} size={32} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name" style={{fontSize:13}}>{f.nickname}</div></div><div className={`gr-todo-cb ${selMembers.includes(f.id)?'done':''}`} style={{width:20,height:20}}>{selMembers.includes(f.id)&&<I n="check" size={12} color="#fff"/>}</div></div>)}</div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!name.trim()||saving} onClick={save}>{saving?'만드는중...':'만들기'}</button></div></div>;
+  return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 캘린더방</div><div style={{width:28}}/></div><div className="gr-pg-body"><div className="gr-pg-label">썸네일 이미지</div><div className="gr-thumb-upload" onClick={()=>thumbRef.current?.click()}>{thumbPreview?<><img src={thumbPreview} alt="" className="gr-thumb-img"/><button className="gr-thumb-remove" onClick={e=>{e.stopPropagation();removeThumb();}}><I n="x" size={14} color="#fff"/></button></>:<div className="gr-thumb-placeholder"><I n="image" size={28} color="var(--gr-t3)"/><span style={{fontSize:12,color:'var(--gr-t3)',marginTop:4}}>이미지 선택</span></div>}</div><input ref={thumbRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleThumb}/><div className="gr-pg-label">캘린더명</div><input className="gr-input" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" autoFocus style={{marginBottom:12}}/><div className="gr-pg-label">설명</div><input className="gr-input" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="설명" style={{marginBottom:12}}/><div className="gr-pg-label">공개 여부</div><div style={{display:'flex',gap:8,marginBottom:16}}><button className={`gr-pill ${isPublic?'on':''}`} style={isPublic?{background:'var(--gr-acc)',color:'var(--gr-acc-text)'}:{}} onClick={()=>setIsPublic(true)}>공개</button><button className={`gr-pill ${!isPublic?'on':''}`} style={!isPublic?{background:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setIsPublic(false)}>비공개</button></div><div className="gr-pg-label">기능 ON/OFF</div>{ALL_MENUS.map(m=> <div key={m.id} className="gr-set-row"><span className="gr-set-label"><I n={m.icon} size={16}/> {m.label}</span><Toggle on={menus[m.id]} toggle={()=>toggleMenu(m.id)}/></div>)}<div className="gr-pg-label" style={{marginTop:16}}>멤버 초대 (선택)</div>{friends.map(f=> <div key={f.id} className="gr-friend-row" style={{padding:'8px 0'}} onClick={()=>toggleMember(f.id)}><Avatar name={f.nickname} size={32} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name" style={{fontSize:13}}>{f.nickname}</div></div><div className={`gr-todo-cb ${selMembers.includes(f.id)?'done':''}`} style={{width:20,height:20}}>{selMembers.includes(f.id)&&<I n="check" size={12} color="#fff"/>}</div></div>)}</div><div className="gr-save-bar"><button className="gr-save-btn" disabled={!name.trim()||saving} onClick={save}>{saving?'만드는중...':'만들기'}</button></div></div>;
 }
 
 const CSS = `
-:root{--gr-ff:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--gr-bg:#FFF;--gr-bg2:#F5F5F5;--gr-brd:#EBEBEB;--gr-text:#191919;--gr-t2:#666;--gr-t3:#999;--gr-acc:#F5A928;--gr-acc-d:#E09820;--gr-inc:#3182F6;--gr-exp:#F04452;--gr-r:12px;--gr-r-sm:8px;--gr-sidebar-w:360px;--gr-tr:150ms ease}
+:root{--gr-ff:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--gr-bg:#FFF;--gr-bg2:#F5F5F5;--gr-brd:#EBEBEB;--gr-text:#191919;--gr-t2:#666;--gr-t3:#999;--gr-acc:#FEE500;--gr-acc-d:#F5D800;--gr-acc-text:#191919;--gr-inc:#3182F6;--gr-exp:#F04452;--gr-r:12px;--gr-r-sm:8px;--gr-sidebar-w:360px;--gr-tr:150ms ease}
 *{margin:0;padding:0;box-sizing:border-box}
 .gr-root{height:100vh;overflow:hidden}
 .gr-layout-wide{display:flex;height:100vh;font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg)}
@@ -1481,25 +1874,25 @@ const CSS = `
 .gr-divider-line{height:1px;background:var(--gr-brd);margin:8px 20px}.gr-section-label{font-size:12px;color:var(--gr-t3);padding:12px 20px 4px;font-weight:500}
 .gr-room-row{display:flex;align-items:center;gap:14px;padding:14px 20px;cursor:pointer;transition:background var(--gr-tr)}.gr-room-row:active,.gr-room-row:hover{background:var(--gr-bg2)}.gr-room-row.active{background:var(--gr-bg2)}
 .gr-room-info{flex:1;min-width:0}.gr-room-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:6px}
-.gr-badge-my{font-size:10px;background:var(--gr-acc);color:#fff;padding:1px 6px;border-radius:8px;font-weight:700}
+.gr-badge-my{font-size:10px;background:var(--gr-acc);color:var(--gr-acc-text);padding:1px 6px;border-radius:8px;font-weight:700}
 .gr-room-preview{font-size:12px;color:var(--gr-t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gr-room-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
-.gr-room-new{background:var(--gr-acc);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 6px}
+.gr-room-new{background:var(--gr-acc);color:var(--gr-acc-text);font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 6px}
 .gr-room-members{font-size:11px;color:var(--gr-t3);display:flex;align-items:center;gap:3px}
 .gr-more-item{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--gr-brd);font-size:15px;cursor:pointer}
 .gr-room-top{padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--gr-brd);flex-shrink:0}.gr-room-top-info{flex:1}.gr-room-top-name{font-size:16px;font-weight:700}.gr-room-top-members{font-size:11px;color:var(--gr-t3)}
 .gr-room-tabs{display:flex;padding:4px 12px;gap:2px;border-bottom:1px solid var(--gr-brd);overflow-x:auto;flex-shrink:0}.gr-room-tabs::-webkit-scrollbar{height:0}
-.gr-room-tab{padding:8px 12px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:500;color:var(--gr-t3);font-family:var(--gr-ff);border-radius:var(--gr-r-sm);white-space:nowrap;display:flex;align-items:center;gap:4px}.gr-room-tab.on{background:var(--gr-acc);color:#fff;font-weight:600}
+.gr-room-tab{padding:8px 12px;border:none;background:none;cursor:pointer;font-size:12px;font-weight:500;color:var(--gr-t3);font-family:var(--gr-ff);border-radius:var(--gr-r-sm);white-space:nowrap;display:flex;align-items:center;gap:4px}.gr-room-tab.on{background:var(--gr-acc);color:var(--gr-acc-text);font-weight:600}
 .gr-room-body{flex:1;overflow-y:auto}.gr-room-body::-webkit-scrollbar{width:0}
 .gr-empty{text-align:center;padding:60px 20px;color:var(--gr-t3);font-size:14px;line-height:1.8}
-.gr-fab{position:absolute;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--gr-acc);border:none;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;z-index:50}.gr-fab:active{transform:scale(.95)}
+.gr-fab{position:absolute;bottom:16px;right:16px;width:52px;height:52px;border-radius:50%;background:var(--gr-acc);border:none;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;z-index:50;color:var(--gr-acc-text)}.gr-fab:active{transform:scale(.95)}
 .gr-cal-nav{display:flex;align-items:center;justify-content:center;gap:16px;padding:12px 20px}.gr-cal-nav h3{font-size:15px;font-weight:700;min-width:110px;text-align:center}
 .gr-cal-nav-btn{background:none;border:none;cursor:pointer;color:var(--gr-t3);padding:4px;display:flex;border-radius:50%}.gr-cal-nav-btn:active{background:var(--gr-bg2)}
 .gr-cal-head{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;padding:0 16px}.gr-cal-head span{font-size:12px;color:var(--gr-t3);padding:6px 0;font-weight:500}.gr-cal-head span:first-child{color:var(--gr-exp)}.gr-cal-head span:last-child{color:var(--gr-inc)}
 .gr-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);padding:0 16px;gap:2px}
 .gr-cal-cell{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;min-height:40px;gap:2px}.gr-cal-cell:active{background:var(--gr-bg2)}
 .gr-cal-d{font-size:13px;font-weight:500;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
-.gr-cal-cell.tod .gr-cal-d{background:var(--gr-acc);color:#fff;font-weight:700}.gr-cal-cell.sel .gr-cal-d{outline:2px solid var(--gr-text)}.gr-cal-cell.ot{opacity:.25}
+.gr-cal-cell.tod .gr-cal-d{background:var(--gr-acc);color:var(--gr-acc-text);font-weight:700}.gr-cal-cell.sel .gr-cal-d{outline:2px solid var(--gr-text)}.gr-cal-cell.ot{opacity:.25}
 .gr-cal-dots{display:flex;gap:2px}.gr-cal-dots span{width:4px;height:4px;border-radius:50%}
 .gr-cal-sel-info{padding:16px 20px;border-top:1px solid var(--gr-brd);margin-top:8px}.gr-cal-sel-date{font-size:13px;font-weight:600;color:var(--gr-t2);margin-bottom:8px}
 .gr-cal-empty{text-align:center;padding:20px;color:var(--gr-t3);font-size:13px}
@@ -1508,17 +1901,17 @@ const CSS = `
 .gr-pg-body{flex:1;overflow-y:auto;padding:16px 20px}.gr-pg-body::-webkit-scrollbar{width:0}
 .gr-pg-label{font-size:13px;font-weight:600;color:var(--gr-t2);margin-bottom:6px;margin-top:12px;display:flex;align-items:center;gap:6px}.gr-pg-label:first-child{margin-top:0}
 .gr-input{width:100%;padding:12px 14px;border:1px solid var(--gr-brd);border-radius:var(--gr-r-sm);font-size:14px;font-family:var(--gr-ff);outline:none;background:var(--gr-bg);color:var(--gr-text)}.gr-input:focus{border-color:var(--gr-acc)}.gr-input::placeholder{color:#ccc}.gr-input.lg{font-size:16px;font-weight:600;margin-bottom:12px}
-.gr-btn-primary{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-btn-primary:hover{background:var(--gr-acc-d)}.gr-btn-primary:disabled{background:#eee;color:#bbb;cursor:default}
+.gr-btn-primary{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:var(--gr-acc-text);font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-btn-primary:hover{background:var(--gr-acc-d)}.gr-btn-primary:disabled{background:#eee;color:#bbb;cursor:default}
 .gr-btn-danger{width:100%;padding:12px;border-radius:var(--gr-r-sm);border:1px solid var(--gr-exp);background:none;color:var(--gr-exp);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);display:flex;align-items:center;justify-content:center;gap:6px}
-.gr-btn-copy{background:var(--gr-acc);color:#fff;border:none;padding:6px 14px;border-radius:var(--gr-r-sm);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
-.gr-btn-sm{padding:8px 16px;border-radius:var(--gr-r-sm);border:none;background:var(--gr-acc);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
+.gr-btn-copy{background:var(--gr-acc);color:var(--gr-acc-text);border:none;padding:6px 14px;border-radius:var(--gr-r-sm);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
+.gr-btn-sm{padding:8px 16px;border-radius:var(--gr-r-sm);border:none;background:var(--gr-acc);color:var(--gr-acc-text);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
 .gr-btn-sm-outline{padding:8px 16px;border-radius:var(--gr-r-sm);border:1px solid var(--gr-brd);background:var(--gr-bg);color:var(--gr-t2);font-size:13px;cursor:pointer;font-family:var(--gr-ff)}
-.gr-btn-invite{display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:var(--gr-r-sm);border:none;background:var(--gr-acc);color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);white-space:nowrap}
+.gr-btn-invite{display:flex;align-items:center;gap:4px;padding:6px 12px;border-radius:var(--gr-r-sm);border:none;background:var(--gr-acc);color:var(--gr-acc-text);font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);white-space:nowrap}
 .gr-pill{padding:8px 16px;border-radius:20px;border:1px solid var(--gr-brd);font-size:13px;cursor:pointer;background:var(--gr-bg);color:var(--gr-t2);font-family:var(--gr-ff)}
 .gr-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--gr-t3);font-size:12px}.gr-divider::before,.gr-divider::after{content:'';flex:1;height:1px;background:var(--gr-brd)}
 .gr-code-box{display:flex;align-items:center;justify-content:space-between;background:var(--gr-bg2);padding:12px 14px;border-radius:var(--gr-r-sm);font-size:14px;font-weight:600}
 .gr-save-bar{padding:12px 20px;border-top:1px solid var(--gr-brd);flex-shrink:0}
-.gr-save-btn{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-save-btn:hover{background:var(--gr-acc-d)}.gr-save-btn:disabled{background:#eee;color:#bbb;cursor:default}
+.gr-save-btn{width:100%;padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:var(--gr-acc-text);font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-save-btn:hover{background:var(--gr-acc-d)}.gr-save-btn:disabled{background:#eee;color:#bbb;cursor:default}
 .gr-clr-row{display:flex;gap:6px;flex-wrap:wrap}.gr-clr-b{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer}.gr-clr-b.on{border-color:var(--gr-text);box-shadow:0 0 0 2px #fff inset}
 .gr-form-row{display:flex;gap:8px;margin-bottom:12px}.gr-form-half{flex:1}
 .gr-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-top:1px solid var(--gr-brd);cursor:pointer;font-weight:600;font-size:14px}
@@ -1531,7 +1924,7 @@ const CSS = `
 .gr-memo-search{flex:1;display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--gr-brd);border-radius:var(--gr-r-sm);background:var(--gr-bg2)}
 .gr-memo-search-input{border:none;outline:none;background:transparent;flex:1;font-size:13px;font-family:var(--gr-ff);color:var(--gr-text)}.gr-memo-search-input::placeholder{color:var(--gr-t3)}
 .gr-memo-view-toggle{display:flex;gap:2px}
-.gr-memo-card{padding:14px;border:1px solid var(--gr-brd);border-radius:var(--gr-r);margin-bottom:8px}.gr-memo-card.pinned{border-color:var(--gr-acc);background:#FFF9F0}
+.gr-memo-card{padding:14px;border:1px solid var(--gr-brd);border-radius:var(--gr-r);margin-bottom:8px}.gr-memo-card.pinned{border-color:var(--gr-acc);background:#FFFDE6}
 .gr-memo-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.gr-memo-card-actions{display:flex;gap:2px;flex-shrink:0}
 .gr-memo-title{font-size:14px;font-weight:600}.gr-memo-preview{font-size:12px;color:var(--gr-t3);margin-top:4px;line-height:1.5}.gr-memo-date{font-size:11px;color:var(--gr-t3);margin-top:6px}
 .gr-memo-list-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--gr-brd)}.gr-memo-list-row.pinned{background:#FFFAF0}
@@ -1541,7 +1934,7 @@ const CSS = `
 .gr-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .gr-pills-scroll{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px;flex-wrap:nowrap}.gr-pills-scroll::-webkit-scrollbar{height:0}.gr-pills-scroll .gr-pill-btn{flex-shrink:0}
 .gr-emoji-row{display:flex;gap:4px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px}.gr-emoji-row::-webkit-scrollbar{height:0}
-.gr-emoji-btn{width:36px;height:36px;border-radius:50%;border:2px solid transparent;background:var(--gr-bg2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}.gr-emoji-btn.on{border-color:var(--gr-acc);background:#FFF5E0}
+.gr-emoji-btn{width:36px;height:36px;border-radius:50%;border:2px solid transparent;background:var(--gr-bg2);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}.gr-emoji-btn.on{border-color:var(--gr-acc);background:#FFFDE6}
 /* Threads 피드 */
 .gr-thr-feed{padding:0}
 .gr-thr-post{padding:14px 16px;border-bottom:1px solid var(--gr-brd)}
@@ -1601,6 +1994,10 @@ const CSS = `
 .gr-diary-date{font-size:11px;color:var(--gr-t3);margin-top:6px}.gr-diary-title{font-size:14px;font-weight:600;margin-bottom:4px}.gr-diary-content{font-size:13px;color:var(--gr-t2);line-height:1.6}
 .gr-diary-upload-area{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .gr-diary-upload-thumb{width:80px;height:80px;border-radius:8px;overflow:hidden;position:relative;flex-shrink:0}
+.gr-thumb-upload{width:100%;height:120px;border:2px dashed var(--gr-brd);border-radius:var(--gr-r);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;margin-bottom:16px;transition:border-color var(--gr-tr)}.gr-thumb-upload:hover{border-color:var(--gr-acc)}
+.gr-thumb-img{width:100%;height:100%;object-fit:cover}
+.gr-thumb-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gr-thumb-remove{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
 .gr-diary-upload-remove{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.5);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .gr-diary-upload-add{width:80px;height:80px;border-radius:8px;border:2px dashed var(--gr-brd);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .gr-budget-summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
@@ -1609,4 +2006,41 @@ const CSS = `
 @media(min-width:481px)and(max-width:1024px){:root{--gr-sidebar-w:320px}.gr-cal-cell{min-height:36px}}
 @media(min-width:1025px){:root{--gr-sidebar-w:380px}.gr-cal-cell{min-height:44px}.gr-cal-d{width:32px;height:32px;font-size:14px}}
 @media(max-width:480px){.gr-sidebar,.gr-panel{max-width:100vw}.gr-cal-cell{min-height:38px}}
+.gr-myinfo-card{background:var(--gr-bg);border:1px solid var(--gr-brd);border-radius:var(--gr-r);padding:4px 16px;margin-bottom:4px}
+.gr-myinfo-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gr-brd)}.gr-myinfo-row:last-child{border-bottom:none}
+.gr-myinfo-label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--gr-text)}
+.gr-myinfo-val{font-size:14px;color:var(--gr-text);display:flex;align-items:center;gap:4px}
+.gr-loading-spinner{width:28px;height:28px;border:3px solid var(--gr-brd);border-top-color:var(--gr-acc);border-radius:50%;animation:gr-spin .6s linear infinite}
+@keyframes gr-spin{to{transform:rotate(360deg)}}
+.gr-login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;font-family:var(--gr-ff);background:linear-gradient(135deg,#FFFEF5 0%,#FFF9DB 50%,#FFF3BF 100%);position:relative;overflow:hidden}
+.gr-login-wrap::before{content:'';position:absolute;width:400px;height:400px;background:radial-gradient(circle,rgba(245,169,40,.2) 0%,transparent 70%);top:-100px;right:-100px;border-radius:50%}
+.gr-login-wrap::after{content:'';position:absolute;width:300px;height:300px;background:radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%);bottom:-80px;left:-80px;border-radius:50%}
+.gr-login-card{background:#fff;border-radius:20px;padding:40px 32px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,.06);position:relative;z-index:1}
+.gr-login-logo{text-align:center;margin-bottom:32px}
+.gr-login-logo-icon{width:64px;height:64px;background:var(--gr-acc);border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:var(--gr-acc-text);margin:0 auto 12px;box-shadow:0 4px 12px rgba(254,229,0,.4)}
+.gr-login-logo-text{font-size:28px;font-weight:800;letter-spacing:-1px;color:var(--gr-text)}.gr-login-logo-text span{color:var(--gr-acc)}
+.gr-login-subtitle{font-size:13px;color:var(--gr-t3);margin-top:4px;letter-spacing:1px}
+.gr-login-buttons{display:flex;flex-direction:column;gap:10px}
+.gr-login-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;border-radius:var(--gr-r);border:1px solid var(--gr-brd);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);transition:all 150ms;background:#fff;color:var(--gr-text)}
+.gr-login-btn:hover{box-shadow:0 2px 8px rgba(0,0,0,.08);transform:translateY(-1px)}
+.gr-login-btn-email{background:var(--gr-text);color:#fff;border-color:var(--gr-text)}.gr-login-btn-email:hover{background:#333}
+.gr-login-btn-google{background:#fff}.gr-login-btn-google:hover{background:#F8F9FA}
+.gr-login-btn-kakao{background:#FEE500;border-color:#FEE500;color:#3C1E1E}.gr-login-btn-kakao:hover{background:#F5D800}
+.gr-login-btn-pin{background:var(--gr-bg2);border-color:var(--gr-bg2);color:var(--gr-t2)}.gr-login-btn-pin:hover{background:#EFEFEF}
+.gr-login-divider{display:flex;align-items:center;gap:12px;margin:6px 0;color:var(--gr-t3);font-size:12px}.gr-login-divider::before,.gr-login-divider::after{content:'';flex:1;height:1px;background:var(--gr-brd)}
+.gr-login-footer{text-align:center;margin-top:20px;font-size:13px;color:var(--gr-t3)}
+.gr-login-link{background:none;border:none;color:var(--gr-acc);font-weight:600;cursor:pointer;font-family:var(--gr-ff);font-size:13px}
+.gr-login-back{position:absolute;top:16px;left:16px;background:none;border:none;cursor:pointer;color:var(--gr-t3);padding:4px;display:flex}
+.gr-login-error{background:#FEF2F2;color:var(--gr-exp);padding:10px 14px;border-radius:var(--gr-r-sm);font-size:13px;margin-bottom:12px;text-align:center}
+.gr-login-form{display:flex;flex-direction:column;gap:10px}
+.gr-login-field{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--gr-brd);border-radius:var(--gr-r-sm);transition:border 150ms}
+.gr-login-field:focus-within{border-color:var(--gr-acc)}
+.gr-login-field input{flex:1;border:none;outline:none;font-size:14px;font-family:var(--gr-ff);background:transparent;color:var(--gr-text)}
+.gr-login-field input::placeholder{color:#ccc}
+.gr-login-submit{padding:14px;border-radius:var(--gr-r);border:none;background:var(--gr-acc);color:var(--gr-acc-text);font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff);transition:all 150ms;margin-top:4px}.gr-login-submit:hover{background:var(--gr-acc-d)}.gr-login-submit:disabled{background:#eee;color:#bbb;cursor:default}
+.gr-login-platform-badge{position:absolute;bottom:20px;font-size:12px;color:var(--gr-t3);z-index:1;background:rgba(255,255,255,.7);padding:4px 12px;border-radius:20px}
+.gr-pin-dots{display:flex;justify-content:center;gap:12px;margin-bottom:24px}
+.gr-pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--gr-brd);transition:all .2s}.gr-pin-dot.filled{background:var(--gr-text);border-color:var(--gr-text)}
+.gr-pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:260px;margin:0 auto}
+.gr-pin-key{width:100%;aspect-ratio:1.4;border:none;border-radius:var(--gr-r);font-size:22px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);background:var(--gr-bg2);color:var(--gr-text);transition:all .1s}.gr-pin-key:active{background:var(--gr-brd);transform:scale(.95)}.gr-pin-key.empty{background:transparent;cursor:default}
 `;
