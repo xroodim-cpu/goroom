@@ -165,8 +165,15 @@ function LoginPage({ onLogin }) {
     setLoading(false);
   };
 
-  const handleSocialLogin = (provider) => {
-    setError(`${provider === 'google' ? '구글' : '카카오'} 로그인은 준비 중입니다. 이메일로 가입해주세요.`);
+  const handleSocialLogin = async (provider) => {
+    setLoading(true); setError('');
+    try {
+      const { error: err } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: window.location.origin },
+      });
+      if (err) throw err;
+    } catch (e) { setError(e.message); setLoading(false); }
   };
 
   const handlePinLogin = () => {
@@ -312,11 +319,46 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         const u = session.user;
+        const meta = u.user_metadata || {};
+        const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
         localStorage.setItem('goroom_user_id', u.id);
-        setUser({ id: u.id, email: u.email, nickname: u.user_metadata?.name || u.email?.split('@')[0] || '나' });
+        setUser({ id: u.id, email: u.email, nickname });
       }
       setAuthChecked(true);
     });
+    // Clean up OAuth hash fragment
+    if (window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  // OAuth 리다이렉트 후 세션 감지 + goroom_users 자동 생성
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const u = session.user;
+        const meta = u.user_metadata || {};
+        const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
+        const avatarUrl = meta.avatar_url || meta.picture || null;
+        localStorage.setItem('goroom_user_id', u.id);
+        setUser({ id: u.id, email: u.email, nickname });
+
+        // goroom_users에 없으면 자동 생성
+        const { data: existing } = await supabase.from('goroom_users').select('id').eq('id', u.id).single();
+        if (!existing) {
+          const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
+          await supabase.from('goroom_users').insert({
+            id: u.id, nickname, status_msg: '', profile_img: avatarUrl,
+            profile_bg: null, link_code: linkCode, birthday: '',
+          });
+        }
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('goroom_user_id');
+        setUser(null);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogin = (u) => setUser(u);
