@@ -168,9 +168,12 @@ function LoginPage({ onLogin }) {
   const handleSocialLogin = async (provider) => {
     setLoading(true); setError('');
     try {
+      const opts = { redirectTo: window.location.origin };
+      // 카카오: account_email 권한이 없으므로 scope에서 제외
+      if (provider === 'kakao') opts.scopes = 'profile_nickname profile_image';
       const { error: err } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: window.location.origin },
+        options: opts,
       });
       if (err) throw err;
     } catch (e) { setError(e.message); setLoading(false); }
