@@ -539,22 +539,24 @@ function AppMain({ authUser, onLogout }){
   const openProfile = (id) => { setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
   const openRoom = (id) => { setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
   const goBack = () => { if(subPage){ setSubPage(null); } else {
-    // 뒤로 갈 때 현재 탭에 맞는 기본 페이지로 복귀
-    if(tab==='friends'){ setSelectedId(userId); setPage('profile'); }
-    else if(tab==='rooms'){ const myRoom=rooms.find(r=>r.isPersonal); if(myRoom){setSelectedId(myRoom.id);setRoomTab('cal');setPage('room');} else {setPage(null);setSelectedId(null);} }
-    else if(tab==='more'){ setPage('my-info'); setSelectedId(null); }
-    else { setPage(null); setSelectedId(null); }
+    // PC(와이드)에서는 탭 기본 페이지로 복귀, 모바일에서는 사이드바로
+    if(isWide) {
+      if(tab==='friends'){ setSelectedId(userId); setPage('profile'); }
+      else if(tab==='rooms'){ const myRoom=rooms.find(r=>r.isPersonal); if(myRoom){setSelectedId(myRoom.id);setRoomTab('cal');setPage('room');} else {setPage(null);setSelectedId(null);} }
+      else if(tab==='more'){ setPage('my-info'); setSelectedId(null); }
+      else { setPage(null); setSelectedId(null); }
+    } else { setPage(null); setSelectedId(null); }
     setSchDetail(null);
   }};
 
-  // 초기 로드 완료 후 탭에 맞는 기본 페이지 설정
+  // PC(와이드)에서만 초기 로드 시 탭 기본 페이지 설정
   useEffect(() => {
-    if(!loading && !page) {
+    if(!loading && !page && isWide) {
       if(tab==='friends'){ setSelectedId(userId); setPage('profile'); }
       else if(tab==='rooms'){ const myRoom=rooms.find(r=>r.isPersonal); if(myRoom){setSelectedId(myRoom.id);setRoomTab('cal');setPage('room');} }
       else if(tab==='more'){ setPage('my-info'); }
     }
-  }, [loading]);
+  }, [loading, isWide]);
 
   const updateRoom = useCallback((rid, fn) => setRooms(p => p.map(r => r.id === rid ? fn(r) : r)), []);
 
@@ -948,7 +950,7 @@ function AppMain({ authUser, onLogout }){
         <div className="gr-more-item" onClick={()=>setPage('notification-settings')}><I n="bell" size={20}/><span>알림 설정</span></div>
         <div className="gr-more-item" onClick={()=>setPage('app-settings')}><I n="gear" size={20}/><span>설정</span></div>
       </div></>}
-      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{setTab('friends');openProfile(userId);}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{setTab('rooms');const myRoom=rooms.find(r=>r.isPersonal);if(myRoom)openRoom(myRoom.id);}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{setTab('more');setPage('my-info');}}><I n="more" size={22}/><span>더보기</span></button></div>
+      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{setTab('friends');if(isWide){openProfile(userId);}else{setPage(null);setSelectedId(null);}}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{setTab('rooms');if(isWide){const myRoom=rooms.find(r=>r.isPersonal);if(myRoom)openRoom(myRoom.id);}else{setPage(null);setSelectedId(null);}}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{setTab('more');if(isWide){setPage('my-info');}else{setPage(null);setSelectedId(null);}}}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>
   );
 
