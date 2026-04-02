@@ -322,7 +322,10 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    // 세션 체크 타임아웃 (5초) - 만료된 토큰으로 hang 방지
+    const timeout = setTimeout(() => { setAuthChecked(true); }, 5000);
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeout);
       if (session?.user) {
         const u = session.user;
         const meta = u.user_metadata || {};
@@ -335,7 +338,7 @@ export default function App() {
       if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
         window.history.replaceState(null, '', window.location.pathname);
       }
-    });
+    }).catch(() => { clearTimeout(timeout); setAuthChecked(true); });
   }, []);
 
   // OAuth 리다이렉트 후 세션 감지 + goroom_users 자동 생성
