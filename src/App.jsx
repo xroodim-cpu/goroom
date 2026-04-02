@@ -169,8 +169,11 @@ function LoginPage({ onLogin }) {
     setLoading(true); setError('');
     try {
       const opts = { redirectTo: window.location.origin };
-      // 카카오: account_email 권한이 없으므로 scope에서 제외
-      if (provider === 'kakao') opts.scopes = 'profile_nickname profile_image';
+      // 카카오: account_email 권한이 없으므로 scope를 직접 오버라이드
+      if (provider === 'kakao') {
+        opts.scopes = 'profile_nickname profile_image';
+        opts.queryParams = { scope: 'profile_nickname profile_image' };
+      }
       const { error: err } = await supabase.auth.signInWithOAuth({
         provider,
         options: opts,
