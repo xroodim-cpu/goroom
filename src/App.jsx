@@ -325,11 +325,11 @@ export default function App() {
         setUser({ id: u.id, email: u.email, nickname });
       }
       setAuthChecked(true);
+      // Clean up OAuth hash/query params after session is processed
+      if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
     });
-    // Clean up OAuth hash fragment
-    if (window.location.hash.includes('access_token')) {
-      window.history.replaceState(null, '', window.location.pathname);
-    }
   }, []);
 
   // OAuth 리다이렉트 후 세션 감지 + goroom_users 자동 생성
