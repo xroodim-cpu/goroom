@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:goroom.vercel.app)",
+      "Bash(start:*)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "Bash(npm run:*)",
+      "WebFetch(domain:roodim.app)",
+      "WebFetch(domain:ai-office-xroodim-1932s-projects.vercel.app)",
+      "Bash(mkdir -p /tmp/goroom-web)",
+      "Bash(unzip -o goroom-web_1.zip -d /tmp/goroom-web)",
+      "Bash(nslookup:*)",
+      "Bash(mkdir -p /tmp/grweb)",
+      "Bash(unzip -o goroom-web_1.zip -d /tmp/grweb)",
+      "WebFetch(domain:vercel.com)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(npx vite:*)",
+      "Bash(mkdir -p /tmp/grweb1 /tmp/grweb2)",
+      "Bash(unzip -o goroom-web_1.zip -d /tmp/grweb1)",
+      "Bash(unzip -o goroom-web.zip -d /tmp/grweb2)",
+      "Bash(cp /tmp/grweb1/app.jsx \"C:/Users/박선호/Documents/cursor/goroom/tmp_web1.jsx\")",
+      "Bash(cp /tmp/grweb2/goroom-web/app.jsx \"C:/Users/박선호/Documents/cursor/goroom/tmp_web2.jsx\")",
+      "Bash(cp \"C:/Users/박선호/Downloads/goroom-v2.jsx\" \"C:/Users/박선호/Documents/cursor/goroom/tmp_v2.jsx\")",
+      "WebFetch(domain:roodim.com)"
+    ]
+  }
+}

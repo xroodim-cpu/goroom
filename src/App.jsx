@@ -79,6 +79,7 @@ const I = ({n, size=20, color}) => {
     bell:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
     book:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>,
     pin:<svg style={s} viewBox="0 0 24 24" {...p}><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h1a2 2 0 000-4H8a2 2 0 000 4h1v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24z"/></svg>,
+    map:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
     lock:<svg style={s} viewBox="0 0 24 24" {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
     gear:<svg style={s} viewBox="0 0 24 24" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
     link:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>,
@@ -109,7 +110,7 @@ function Avatar({name,size=44,color,src}){
 }
 function Toggle({on,toggle}){ return <button className={`gr-tsw ${on?'on':'off'}`} onClick={e=>{e.stopPropagation();toggle();}}/>; }
 
-const ALL_MENUS=[{id:'cal',icon:'cal',label:'캘린더'},{id:'memo',icon:'edit',label:'메모'},{id:'todo',icon:'check',label:'할일'},{id:'diary',icon:'book',label:'피드'},{id:'budget',icon:'wallet',label:'가계부'},{id:'alarm',icon:'bell',label:'알림'}];
+const ALL_MENUS=[{id:'cal',icon:'cal',label:'캘린더'},{id:'map',icon:'map',label:'맵'},{id:'memo',icon:'edit',label:'메모'},{id:'todo',icon:'check',label:'할일'},{id:'diary',icon:'book',label:'피드'},{id:'budget',icon:'wallet',label:'가계부'},{id:'alarm',icon:'bell',label:'알림'}];
 const DEF_SETTINGS = {
   schCats:[{id:'sc1',name:'업무',color:'#4A90D9'},{id:'sc2',name:'개인',color:'#F09819'},{id:'sc3',name:'건강',color:'#27AE60'},{id:'sc4',name:'공부',color:'#8E44AD'},{id:'sc5',name:'소셜',color:'#00B4D8'},{id:'sc6',name:'기타',color:'#95A5A6'}],
   expCats:[{id:'ec1',name:'식비'},{id:'ec2',name:'교통'},{id:'ec3',name:'쇼핑'},{id:'ec4',name:'의료'},{id:'ec5',name:'기타'}],
@@ -503,11 +504,12 @@ function AppMain({ authUser, onLogout }){
               members: (allMembers || []).map(m => m.user_id),
               newCount: 0,
               nearestSchedule: null,
-              menus: r.menus || {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
+              menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
               settings: { ...DEF_SETTINGS, ...(r.settings || {}) },
               schedules: (schedules || []).map(s => ({
                 id: s.id, title: s.title, date: s.date, time: s.time || '', memo: s.memo || '',
                 color: s.color || '#4A90D9', catId: s.cat_id || '', images: s.images || [],
+                location: s.location || '', locationDetail: s.location_detail || '',
                 createdAt: new Date(s.created_at || Date.now()).getTime(), createdBy: s.created_by,
                 todos: s.todos || [], dday: s.dday || false,
                 repeat: s.repeat || null, alarm: s.alarm || null,
@@ -669,6 +671,7 @@ function AppMain({ authUser, onLogout }){
       id: sch.id, room_id: roomId, created_by: userId,
       title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
       cat_id: sch.catId || null, memo: sch.memo || null,
+      location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
       todos: sch.todos || [], images: imageUrls,
@@ -1227,6 +1230,92 @@ function MiniCal({schedules,onSchClick}){
   </div>;
 }
 
+function RoomMap({schedules,sel}){
+  const mapRef=useRef(null);
+  const mapInstance=useRef(null);
+  const ss=useMemo(()=>{
+    const d=sel instanceof Date?sel.toISOString().slice(0,10):sel;
+    return schedules.filter(s=>s.date===d&&s.location).sort((a,b)=>(a.time||'99:99').localeCompare(b.time||'99:99'));
+  },[schedules,sel]);
+
+  useEffect(()=>{
+    if(!mapRef.current||typeof window.kakao==='undefined') return;
+    const kakao=window.kakao;
+    if(!kakao.maps){return;}
+    const init=()=>{
+      const container=mapRef.current;
+      if(!container) return;
+      const map=new kakao.maps.Map(container,{center:new kakao.maps.LatLng(37.5665,126.978),level:5});
+      mapInstance.current=map;
+      if(ss.length===0) return;
+      const geocoder=new kakao.maps.services.Geocoder();
+      const places=new kakao.maps.services.Places();
+      const bounds=new kakao.maps.LatLngBounds();
+      const coords=[];
+      let resolved=0;
+      const MARKER_COLORS=['#4A90D9','#F09819','#27AE60','#8E44AD','#00B4D8','#E74C3C','#F5A928','#95A5A6'];
+      ss.forEach((sc,idx)=>{
+        const query=sc.locationDetail||sc.location;
+        places.keywordSearch(query,(result,status)=>{
+          resolved++;
+          if(status===kakao.maps.services.Status.OK&&result.length>0){
+            const pos=new kakao.maps.LatLng(result[0].y,result[0].x);
+            coords[idx]=pos;
+            bounds.extend(pos);
+            const mColor=sc.color||MARKER_COLORS[idx%MARKER_COLORS.length];
+            const markerContent=`<div style="display:flex;flex-direction:column;align-items:center;">
+              <div style="background:${mColor};color:#fff;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);border:2px solid #fff;">
+                ${sc.time?'<span style="margin-right:4px;opacity:.85;">'+sc.time+'</span>':''}${sc.title}
+              </div>
+              <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ${mColor};margin-top:-1px;"></div>
+            </div>`;
+            const overlay=new kakao.maps.CustomOverlay({position:pos,content:markerContent,yAnchor:1.3});
+            overlay.setMap(map);
+          }
+          if(resolved===ss.length){
+            // 연결선 그리기
+            const validCoords=ss.map((_,i)=>coords[i]).filter(Boolean);
+            if(validCoords.length>=2){
+              const polyline=new kakao.maps.Polyline({path:validCoords,strokeWeight:3,strokeColor:'#F5A928',strokeOpacity:0.8,strokeStyle:'shortdash'});
+              polyline.setMap(map);
+              // 순서 표시 화살표 마커
+              for(let i=0;i<validCoords.length-1;i++){
+                const mid=new kakao.maps.LatLng(
+                  (validCoords[i].getLat()+validCoords[i+1].getLat())/2,
+                  (validCoords[i].getLng()+validCoords[i+1].getLng())/2
+                );
+                const arrow=new kakao.maps.CustomOverlay({position:mid,content:`<div style="background:#F5A928;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3);border:2px solid #fff;">${i+1}</div>`,yAnchor:0.5});
+                arrow.setMap(map);
+              }
+            }
+            if(validCoords.length>0){map.setBounds(bounds,80,80,80,80);}
+          }
+        },{size:1});
+      });
+    };
+    if(kakao.maps.load) kakao.maps.load(init);
+    else init();
+  },[ss]);
+
+  const dateStr=sel instanceof Date?sel.toISOString().slice(0,10):sel;
+  return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+    <div ref={mapRef} style={{flex:1,minHeight:300,borderRadius:12,overflow:'hidden',border:'1px solid var(--gr-border)'}}/>
+    {ss.length===0&&<div style={{padding:16,textAlign:'center',color:'var(--gr-t3)',fontSize:13}}>
+      {dateStr} 에 장소가 등록된 스케줄이 없습니다
+    </div>}
+    {ss.length>0&&<div style={{padding:'12px 0',overflowY:'auto',maxHeight:200}}>
+      <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:8,fontWeight:600}}>📍 {dateStr} 동선 ({ss.length}곳)</div>
+      {ss.map((sc,i)=><div key={sc.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',fontSize:13}}>
+        <div style={{width:22,height:22,borderRadius:'50%',background:sc.color||'#4A90D9',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>{i+1}</div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:600}}>{sc.time&&<span style={{color:'var(--gr-t3)',marginRight:4}}>{sc.time}</span>}{sc.title}</div>
+          <div style={{fontSize:12,color:'var(--gr-t3)'}}>{sc.location}</div>
+        </div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
 function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,userId,onSchClick,saveSchedule,saveMemo,deleteMemo,updateMemoPin,saveTodo,deleteTodo,updateTodoDone,saveDiary,deleteDiary,updateDiaryLikes,updateDiaryComments,updateRoomInDb,deleteSchedule,deleteRoom,getName}){
   const [sel,setSel]=useState(new Date()); const [nav,setNav]=useState(new Date()); const today=useMemo(()=>new Date(),[]);
   const activeMenus=ALL_MENUS.filter(m=>room.menus[m.id]);
@@ -1246,7 +1335,7 @@ function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,upda
   if(subPage==='add-diary') return <div className="gr-panel"><DiaryForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveDiaryDb={saveDiary} userId={userId}/></div>;
   if(subPage==='add-budget') return <div className="gr-panel"><BudgetForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveSchedule={saveSchedule} userId={userId}/></div>;
   const fabMap={cal:'add-schedule',memo:'add-memo',todo:'add-todo',diary:'add-diary',budget:'add-budget'};
-  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom} deleteMemoDb={deleteMemo} updateMemoPinDb={updateMemoPin}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName} deleteTodoDb={deleteTodo} updateTodoDoneDb={updateTodoDone} userId={userId}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} userId={userId}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules} room={room}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#191919"/></button>}</div>;
+  return <div className="gr-panel"><div className="gr-room-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-room-top-info"><div className="gr-room-top-name">{room.name}</div><div className="gr-room-top-members">{memberList.length}명</div></div><button className="gr-icon-btn" onClick={()=>setSubPage('settings')}><I n="gear" size={18}/></button></div><div className="gr-room-tabs">{activeMenus.map(m=> <button key={m.id} className={`gr-room-tab ${roomTab===m.id?'on':''}`} onClick={()=>setRoomTab(m.id)}><I n={m.icon} size={14}/> {m.label}</button>)}</div><div className="gr-room-body">{roomTab==='cal'&&<RoomCal nav={nav} setNav={setNav} sel={sel} setSel={setSel} today={today} schedules={room.schedules} onSchClick={onSchClick}/>}{roomTab==='memo'&&<RoomMemo memos={room.memos} room={room} updateRoom={updateRoom} deleteMemoDb={deleteMemo} updateMemoPinDb={updateMemoPin}/>}{roomTab==='todo'&&<RoomTodo todos={room.todos} room={room} updateRoom={updateRoom} isMulti={isMulti} getName={getName} deleteTodoDb={deleteTodo} updateTodoDoneDb={updateTodoDone} userId={userId}/>}{roomTab==='diary'&&<RoomDiary diaries={room.diaries} schedules={room.schedules} isMulti={isMulti} getName={getName} room={room} updateRoom={updateRoom} onSchClick={onSchClick} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} userId={userId}/>}{roomTab==='map'&&<RoomMap schedules={room.schedules} sel={sel}/>}{roomTab==='budget'&&<RoomBudget schedules={room.schedules} room={room}/>}{roomTab==='alarm'&&<div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>🔔</div>알림이 없습니다</div>}</div>{fabMap[roomTab]&&<button className="gr-fab" onClick={()=>setSubPage(fabMap[roomTab])}><I n="plus" size={24} color="#191919"/></button>}</div>;
 }
 
 function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,updateRoomInDb,deleteRoom,userId}){
