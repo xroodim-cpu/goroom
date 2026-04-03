@@ -436,133 +436,68 @@ function AppMain({ authUser, onLogout }){
 
   /* ── Load data from Supabase on mount ── */
   useEffect(() => {
-    // 데이터 로딩 타임아웃 (8초) — hang 방지
-    const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout — forcing loading=false'); return false; } return prev; }); }, 8000);
+    const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout'); return false; } return prev; }); }, 8000);
     (async () => {
       try {
-        // 1. Ensure user exists
-        const { data: existingUser } = await supabase.from('goroom_users').select('*').eq('id', userId).single();
-        if (existingUser) {
-          setMe({
-            id: existingUser.id,
-            nickname: existingUser.nickname || '나',
-            statusMsg: existingUser.status_msg || '',
-            linkCode: existingUser.link_code || '',
-            bio: '',
-            profileImg: existingUser.profile_img || null,
-            profileBg: existingUser.profile_bg || null,
-            birthday: existingUser.birthday || '',
-          });
+        // 1~3 병렬: 유저 + 친구 + 방목록 동시 로드
+        const [userRes, friendRes, memberRes] = await Promise.all([
+          supabase.from('goroom_users').select('*').eq('id', userId).single(),
+          supabase.from('goroom_friends').select('*').eq('user_id', userId),
+          supabase.from('goroom_room_members').select('room_id, role').eq('user_id', userId),
+        ]);
+
+        // 유저 처리
+        if (userRes.data) {
+          const eu = userRes.data;
+          setMe({ id: eu.id, nickname: eu.nickname||'나', statusMsg: eu.status_msg||'', linkCode: eu.link_code||'', bio: '', profileImg: eu.profile_img||null, profileBg: eu.profile_bg||null, birthday: eu.birthday||'' });
         } else {
           const linkCode = 'goroom-' + shortId();
-          const newUser = { id: userId, nickname: '나', status_msg: '', profile_img: null, profile_bg: null, link_code: linkCode, birthday: '' };
-          await supabase.from('goroom_users').insert(newUser);
+          await supabase.from('goroom_users').insert({ id: userId, nickname: '나', status_msg: '', profile_img: null, profile_bg: null, link_code: linkCode, birthday: '' });
           setMe(prev => ({ ...prev, linkCode }));
         }
 
-        // 2. Load friends
-        const { data: friendRows } = await supabase.from('goroom_friends').select('*').eq('user_id', userId);
-        if (friendRows && friendRows.length > 0) {
-          const friendIds = friendRows.map(f => f.friend_id);
-          const { data: friendUsers } = await supabase.from('goroom_users').select('*').in('id', friendIds);
-          const friendMap = {};
-          (friendUsers || []).forEach(u => { friendMap[u.id] = u; });
-          setFriends(friendRows.map(fr => {
-            const u = friendMap[fr.friend_id] || {};
-            return {
-              id: fr.friend_id,
-              nickname: u.nickname || '?',
-              statusMsg: u.status_msg || '',
-              isPublic: true,
-              birthday: u.birthday || '',
-              favorite: fr.favorite || false,
-              bio: '',
-              profileImg: u.profile_img || null,
-              profileBg: u.profile_bg || null,
-              updatedAt: null,
-              _friendRowId: fr.id,
-            };
-          }));
+        // 친구 처리
+        const friendRows = friendRes.data || [];
+        if (friendRows.length > 0) {
+          const { data: friendUsers } = await supabase.from('goroom_users').select('*').in('id', friendRows.map(f => f.friend_id));
+          const fm = {}; (friendUsers||[]).forEach(u => { fm[u.id] = u; });
+          setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id }; }));
         }
 
-        // 3. Load rooms
-        const { data: memberRows } = await supabase.from('goroom_room_members').select('room_id, role').eq('user_id', userId);
-        const roomIds = (memberRows || []).map(m => m.room_id);
-
+        // 방 처리
+        const roomIds = (memberRes.data||[]).map(m => m.room_id);
         if (roomIds.length > 0) {
           const { data: roomRows } = await supabase.from('goroom_rooms').select('*').in('id', roomIds);
-          const loadedRooms = [];
-          for (const r of (roomRows || [])) {
-            const { data: allMembers } = await supabase.from('goroom_room_members').select('user_id, role').eq('room_id', r.id);
-            const { data: schedules } = await supabase.from('goroom_schedules').select('*').eq('room_id', r.id);
-            const { data: memos } = await supabase.from('goroom_memos').select('*').eq('room_id', r.id);
-            const { data: todos } = await supabase.from('goroom_todos').select('*').eq('room_id', r.id);
-            const { data: diaries } = await supabase.from('goroom_diaries').select('*').eq('room_id', r.id);
-
-            loadedRooms.push({
-              id: r.id,
-              name: r.name,
-              desc: r.description || '',
-              isPersonal: r.is_personal || false,
-              isPublic: r.is_public !== false,
-              thumbnailUrl: r.thumbnail_url || '',
-              inviteCode: r.invite_code || '',
-              invitePassword: r.invite_password || '',
-              members: (allMembers || []).map(m => m.user_id),
-              newCount: 0,
-              nearestSchedule: null,
+          // 모든 방의 데이터를 병렬로 로드
+          const loadedRooms = await Promise.all((roomRows||[]).map(async r => {
+            const [mbRes, schRes, memRes, tdRes, diRes] = await Promise.all([
+              supabase.from('goroom_room_members').select('user_id, role').eq('room_id', r.id),
+              supabase.from('goroom_schedules').select('*').eq('room_id', r.id),
+              supabase.from('goroom_memos').select('*').eq('room_id', r.id),
+              supabase.from('goroom_todos').select('*').eq('room_id', r.id),
+              supabase.from('goroom_diaries').select('*').eq('room_id', r.id),
+            ]);
+            return {
+              id: r.id, name: r.name, desc: r.description||'', isPersonal: r.is_personal||false, isPublic: r.is_public!==false,
+              thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
+              members: (mbRes.data||[]).map(m => m.user_id), newCount: 0, nearestSchedule: null,
               menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
-              settings: { ...DEF_SETTINGS, ...(r.settings || {}) },
-              schedules: (schedules || []).map(s => ({
-                id: s.id, title: s.title, date: s.date, time: s.time || '', memo: s.memo || '',
-                color: s.color || '#4A90D9', catId: s.cat_id || '', images: s.images || [],
-                location: s.location || '', locationDetail: s.location_detail || '',
-                createdAt: new Date(s.created_at || Date.now()).getTime(), createdBy: s.created_by,
-                todos: s.todos || [], dday: s.dday || false,
-                repeat: s.repeat || null, alarm: s.alarm || null,
-                budget: s.budget || null,
-              })),
-              memos: (memos || []).map(m => ({
-                id: m.id, title: m.title, content: m.content || '', pinned: m.pinned || false,
-                createdAt: new Date(m.created_at || Date.now()).getTime(), createdBy: m.created_by,
-              })),
-              todos: (todos || []).map(t => ({
-                id: t.id, text: t.text, done: t.done || false,
-                createdAt: new Date(t.created_at || Date.now()).getTime(), createdBy: t.created_by,
-                doneAt: t.done_at ? new Date(t.done_at).getTime() : null, doneBy: t.done_by || null,
-              })),
-              diaries: (diaries || []).map(d => ({
-                id: d.id, title: d.content ? '' : '', content: d.content || '', mood: d.mood || '', weather: d.weather || '',
-                images: d.images || [], likes: d.likes || [], comments: d.comments || [],
-                date: fmt(new Date(d.created_at || Date.now())),
-                createdAt: new Date(d.created_at || Date.now()).getTime(), createdBy: d.created_by,
-              })),
-            });
-          }
+              settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
+              schedules: (schRes.data||[]).map(s => ({ id:s.id, title:s.title, date:s.date, time:s.time||'', memo:s.memo||'', color:s.color||'#4A90D9', catId:s.cat_id||'', images:s.images||[], location:s.location||'', locationDetail:s.location_detail||'', createdAt:new Date(s.created_at||Date.now()).getTime(), createdBy:s.created_by, todos:s.todos||[], dday:s.dday||false, repeat:s.repeat||null, alarm:s.alarm||null, budget:s.budget||null })),
+              memos: (memRes.data||[]).map(m => ({ id:m.id, title:m.title, content:m.content||'', pinned:m.pinned||false, createdAt:new Date(m.created_at||Date.now()).getTime(), createdBy:m.created_by })),
+              todos: (tdRes.data||[]).map(t => ({ id:t.id, text:t.text, done:t.done||false, createdAt:new Date(t.created_at||Date.now()).getTime(), createdBy:t.created_by, doneAt:t.done_at?new Date(t.done_at).getTime():null, doneBy:t.done_by||null })),
+              diaries: (diRes.data||[]).map(d => ({ id:d.id, title:'', content:d.content||'', mood:d.mood||'', weather:d.weather||'', images:d.images||[], likes:d.likes||[], comments:d.comments||[], date:fmt(new Date(d.created_at||Date.now())), createdAt:new Date(d.created_at||Date.now()).getTime(), createdBy:d.created_by })),
+            };
+          }));
           setRooms(loadedRooms);
         } else {
-          // No rooms — create default personal room
           const roomId = uid();
-          await supabase.from('goroom_rooms').insert({
-            id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정',
-            is_personal: true, is_public: true,
-            menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
-            settings: DEF_SETTINGS,
-          });
+          await supabase.from('goroom_rooms').insert({ id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정', is_personal: true, is_public: true, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: DEF_SETTINGS });
           await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' });
-          setRooms([{
-            id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true,
-            members: [userId], newCount: 0, nearestSchedule: null,
-            menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true},
-            settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [],
-          }]);
+          setRooms([{ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] }]);
         }
-      } catch (e) {
-        console.error('Init error:', e);
-      } finally {
-        clearTimeout(loadTimeout);
-        setLoading(false);
-      }
+      } catch (e) { console.error('Init error:', e);
+      } finally { clearTimeout(loadTimeout); setLoading(false); }
     })();
     return () => clearTimeout(loadTimeout);
   }, [userId]);
