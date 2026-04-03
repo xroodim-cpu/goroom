@@ -322,81 +322,73 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
-  // 세션에서 유저 정보 추출 헬퍼
-  const extractUser = (session) => {
-    if (!session?.user) return null;
+  const setUserFromSession = (session) => {
+    if (!session?.user) return false;
     const u = session.user;
     const meta = u.user_metadata || {};
     const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
-    return { id: u.id, email: u.email, nickname, avatarUrl: meta.avatar_url || meta.picture || null };
+    localStorage.setItem('goroom_user_id', u.id);
+    setUser({ id: u.id, email: u.email, nickname });
+    return true;
   };
 
   useEffect(() => {
     let mounted = true;
+    let resolved = false;
 
-    // 1) onAuthStateChange 먼저 등록 — INITIAL_SESSION 이벤트로 세션 확인
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+    // OAuth hash 정리
+    if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
 
-      if (event === 'INITIAL_SESSION') {
-        // 앱 로드 시 최초 세션 확인 (getSession 대체)
-        const info = extractUser(session);
-        if (info) {
-          localStorage.setItem('goroom_user_id', info.id);
-          setUser({ id: info.id, email: info.email, nickname: info.nickname });
-        }
+    // 1) getSession을 Promise.race로 3초 타임아웃
+    const timeoutP = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    Promise.race([supabase.auth.getSession(), timeoutP])
+      .then(({ data: { session } }) => {
+        if (!mounted || resolved) return;
+        resolved = true;
+        setUserFromSession(session);
         setAuthChecked(true);
-        // OAuth hash 정리
-        if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
-          window.history.replaceState(null, '', window.location.pathname);
-        }
-      }
-
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-        const info = extractUser(session);
-        if (info) {
-          localStorage.setItem('goroom_user_id', info.id);
-          setUser({ id: info.id, email: info.email, nickname: info.nickname });
-
-          // SIGNED_IN일 때만 goroom_users 자동 생성
-          if (event === 'SIGNED_IN') {
-            const { data: existing } = await supabase.from('goroom_users').select('id').eq('id', info.id).single();
-            if (!existing) {
-              const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
-              await supabase.from('goroom_users').insert({
-                id: info.id, nickname: info.nickname, status_msg: '', profile_img: info.avatarUrl,
-                profile_bg: null, link_code: linkCode, birthday: '',
-              });
-            }
-          }
-        }
-        setAuthChecked(true);
-      }
-
-      if (event === 'SIGNED_OUT') {
+      })
+      .catch(async () => {
+        if (!mounted || resolved) return;
+        resolved = true;
+        console.warn('Auth session timeout/error — signing out');
+        try { await supabase.auth.signOut(); } catch(e){}
         localStorage.removeItem('goroom_user_id');
         setUser(null);
         setAuthChecked(true);
+      });
+
+    // 2) onAuthStateChange — OAuth 리다이렉트 + 토큰 갱신 처리
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUserFromSession(session);
+        if (!resolved) { resolved = true; setAuthChecked(true); }
+        // goroom_users 자동 생성
+        const u = session.user;
+        const meta = u.user_metadata || {};
+        const { data: existing } = await supabase.from('goroom_users').select('id').eq('id', u.id).single();
+        if (!existing) {
+          const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
+          await supabase.from('goroom_users').insert({
+            id: u.id, nickname: meta.full_name || meta.name || u.email?.split('@')[0] || '나',
+            status_msg: '', profile_img: meta.avatar_url || meta.picture || null,
+            profile_bg: null, link_code: linkCode, birthday: '',
+          });
+        }
+      }
+      if (event === 'TOKEN_REFRESHED' && session?.user) {
+        setUserFromSession(session);
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('goroom_user_id');
+        setUser(null);
       }
     });
 
-    // 2) 안전망: 3초 뒤에도 authChecked가 false면 만료된 토큰 정리 후 강제 진행
-    const timeout = setTimeout(() => {
-      if (mounted) setAuthChecked(prev => {
-        if (!prev) {
-          console.warn('Auth check timeout — clearing stale tokens');
-          // 만료된/손상된 토큰이 hang의 원인이므로 정리
-          const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
-          if (sbKey) localStorage.removeItem(sbKey);
-          localStorage.removeItem('goroom_user_id');
-          setUser(null);
-          return true;
-        }
-        return prev;
-      });
-    }, 3000);
-
-    return () => { mounted = false; clearTimeout(timeout); subscription.unsubscribe(); };
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
   const handleLogin = (u) => setUser(u);
@@ -514,6 +506,8 @@ function AppMain({ authUser, onLogout }){
               isPersonal: r.is_personal || false,
               isPublic: r.is_public !== false,
               thumbnailUrl: r.thumbnail_url || '',
+              inviteCode: r.invite_code || '',
+              invitePassword: r.invite_password || '',
               members: (allMembers || []).map(m => m.user_id),
               newCount: 0,
               nearestSchedule: null,
@@ -572,6 +566,56 @@ function AppMain({ authUser, onLogout }){
     })();
     return () => clearTimeout(loadTimeout);
   }, [userId]);
+
+  // 초대 링크 처리 (?join=CODE)
+  const [joinModal, setJoinModal] = useState(null);
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('join');
+    if (!joinCode) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    (async () => {
+      const { data: room } = await supabase.from('goroom_rooms').select('id, name, invite_password').eq('invite_code', joinCode).single();
+      if (!room) { alert('유효하지 않은 초대 링크입니다.'); return; }
+      // 이미 멤버인지 확인
+      const { data: existing } = await supabase.from('goroom_room_members').select('user_id').eq('room_id', room.id).eq('user_id', userId).single();
+      if (existing) { alert('이미 가입된 캘린더입니다.'); setTab('rooms'); openRoom(room.id); return; }
+      if (room.invite_password) {
+        setJoinModal({ roomId: room.id, roomName: room.name, needPassword: true });
+      } else {
+        await joinRoom(room.id, room.name);
+      }
+    })();
+  }, [loading]);
+
+  const joinRoom = async (roomId, roomName) => {
+    try {
+      await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'member' });
+      // 방 데이터 로드
+      const { data: r } = await supabase.from('goroom_rooms').select('*').eq('id', roomId).single();
+      const { data: allMembers } = await supabase.from('goroom_room_members').select('user_id').eq('room_id', roomId);
+      const { data: schedules } = await supabase.from('goroom_schedules').select('*').eq('room_id', roomId);
+      const { data: memos } = await supabase.from('goroom_memos').select('*').eq('room_id', roomId);
+      const { data: todos } = await supabase.from('goroom_todos').select('*').eq('room_id', roomId);
+      const { data: diaries } = await supabase.from('goroom_diaries').select('*').eq('room_id', roomId);
+      const newRoom = {
+        id: r.id, name: r.name, desc: r.description||'', isPersonal: false, isPublic: r.is_public!==false,
+        thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
+        members: (allMembers||[]).map(m=>m.user_id), newCount:0, nearestSchedule:null,
+        menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
+        settings: {...DEF_SETTINGS,...(r.settings||{})},
+        schedules: (schedules||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',color:s.color||'#4A90D9',catId:s.cat_id||'',images:s.images||[],location:s.location||'',locationDetail:s.location_detail||'',createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by,todos:s.todos||[],dday:s.dday||false,repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null})),
+        memos: (memos||[]).map(m=>({id:m.id,title:m.title,content:m.content||'',pinned:m.pinned||false,createdAt:new Date(m.created_at||Date.now()).getTime(),createdBy:m.created_by})),
+        todos: (todos||[]).map(t=>({id:t.id,text:t.text,done:t.done||false,createdAt:new Date(t.created_at||Date.now()).getTime(),createdBy:t.created_by,doneAt:t.done_at?new Date(t.done_at).getTime():null,doneBy:t.done_by||null})),
+        diaries: (diaries||[]).map(d=>({id:d.id,title:d.title,content:d.content||'',images:d.images||[],likes:d.likes||[],comments:d.comments||[],date:fmt(new Date(d.created_at||Date.now())),createdAt:new Date(d.created_at||Date.now()).getTime(),createdBy:d.created_by})),
+      };
+      setRooms(prev => [...prev, newRoom]);
+      setJoinModal(null);
+      alert(`"${roomName||r.name}" 캘린더에 가입되었습니다!`);
+      setTab('rooms'); openRoom(roomId);
+    } catch(e) { console.error(e); alert('가입에 실패했습니다.'); }
+  };
 
   const openProfile = (id) => { setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
   const openRoom = (id) => { setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
@@ -865,6 +909,32 @@ function AppMain({ authUser, onLogout }){
     return <div className="gr-root"><style>{CSS}</style><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><div className="gr-loading-spinner"/></div></div>;
   }
 
+  // 비밀번호 입력 모달
+  const JoinPasswordModal = () => {
+    const [pw, setPw] = useState('');
+    const [err, setErr] = useState('');
+    const tryJoin = async () => {
+      const { data: room } = await supabase.from('goroom_rooms').select('invite_password').eq('id', joinModal.roomId).single();
+      if (room && room.invite_password === pw) {
+        await joinRoom(joinModal.roomId, joinModal.roomName);
+      } else {
+        setErr('비밀번호가 틀렸습니다.');
+      }
+    };
+    return <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{background:'#fff',borderRadius:16,padding:24,width:'90%',maxWidth:340}}>
+        <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>캘린더 가입</div>
+        <div style={{fontSize:13,color:'var(--gr-t3)',marginBottom:16}}>"{joinModal.roomName}" 에 가입하려면 비밀번호를 입력하세요.</div>
+        <input className="gr-input" type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr('');}} placeholder="비밀번호" onKeyDown={e=>e.key==='Enter'&&tryJoin()} autoFocus/>
+        {err && <div style={{color:'var(--gr-exp)',fontSize:12,marginTop:4}}>{err}</div>}
+        <div style={{display:'flex',gap:8,marginTop:16}}>
+          <button className="gr-btn-sm-outline" onClick={()=>setJoinModal(null)} style={{flex:1}}>취소</button>
+          <button className="gr-btn-sm" onClick={tryJoin} style={{flex:1}}>가입</button>
+        </div>
+      </div>
+    </div>;
+  };
+
   const renderDetail = () => {
     const sb = !isWide;
 
@@ -994,8 +1064,8 @@ function AppMain({ authUser, onLogout }){
   );
 
   const detail = renderDetail();
-  if (isWide) return (<div className="gr-root"><style>{CSS}</style><div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div>);
-  return (<div className="gr-root"><style>{CSS}</style>{detail || renderSidebar()}</div>);
+  if (isWide) return (<div className="gr-root"><style>{CSS}</style>{joinModal&&<JoinPasswordModal/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div>);
+  return (<div className="gr-root"><style>{CSS}</style>{joinModal&&<JoinPasswordModal/>}{detail || renderSidebar()}</div>);
 }
 
 /* ── 더보기 > 친구 추가 코드 ── */
@@ -1416,6 +1486,23 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
     updateRoom(room.id,r=>({...r,menus:newMenus}));
     await updateRoomInDb(room.id, { menus: newMenus });
   };
+  // 초대 링크
+  const [invPw, setInvPw] = useState(room.invitePassword || '');
+  const [invCopied, setInvCopied] = useState(false);
+  const generateInviteCode = async () => {
+    const code = Math.random().toString(36).slice(2, 10);
+    updateRoom(room.id, r => ({...r, inviteCode: code}));
+    await updateRoomInDb(room.id, { invite_code: code });
+  };
+  const saveInvitePassword = async () => {
+    updateRoom(room.id, r => ({...r, invitePassword: invPw}));
+    await updateRoomInDb(room.id, { invite_password: invPw || null });
+    alert(invPw ? '비밀번호가 설정되었습니다.' : '비밀번호가 해제되었습니다.');
+  };
+  const copyInviteLink = () => {
+    const link = `${window.location.origin}?join=${room.inviteCode}`;
+    navigator.clipboard.writeText(link).then(() => { setInvCopied(true); setTimeout(() => setInvCopied(false), 2000); });
+  };
   const handleDeleteRoom = async () => {
     if(!window.confirm('이 캘린더를 삭제하시겠습니까?')) return;
     await deleteRoom(room.id);
@@ -1447,6 +1534,28 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
 
       <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#191919"/> 초대</button></div>
       {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!==userId&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
+
+      {!room.isPersonal && <><div className="gr-pg-label" style={{marginTop:20}}><I n="link" size={14}/> 초대 링크</div>
+      {room.inviteCode ? (
+        <div style={{padding:'12px',background:'var(--gr-bg)',borderRadius:12,marginBottom:8}}>
+          <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}>초대 링크</div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <input className="gr-input" readOnly value={`${window.location.origin}?join=${room.inviteCode}`} style={{flex:1,fontSize:12}}/>
+            <button className="gr-btn-sm" onClick={copyInviteLink} style={{whiteSpace:'nowrap'}}>{invCopied?'복사됨!':'복사'}</button>
+          </div>
+          <button className="gr-btn-sm-outline" onClick={generateInviteCode} style={{marginTop:8,fontSize:12}}>링크 재생성</button>
+        </div>
+      ) : (
+        <button className="gr-btn-sm" onClick={generateInviteCode} style={{marginBottom:8}}>초대 링크 생성</button>
+      )}
+      <div style={{padding:'12px',background:'var(--gr-bg)',borderRadius:12,marginBottom:8}}>
+        <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}><I n="lock" size={12}/> 가입 비밀번호 (선택)</div>
+        <div style={{display:'flex',gap:6}}>
+          <input className="gr-input" value={invPw} onChange={e=>setInvPw(e.target.value)} placeholder="비밀번호 미설정" style={{flex:1}}/>
+          <button className="gr-btn-sm" onClick={saveInvitePassword}>저장</button>
+        </div>
+        <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>설정하면 링크로 접속 시 비밀번호 입력 필요</div>
+      </div></>}
 
       <div className="gr-pg-label" style={{marginTop:20}}>기능 ON/OFF</div>
 
