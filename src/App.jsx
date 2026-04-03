@@ -847,6 +847,7 @@ function AppMain({ authUser, onLogout }){
         }}><I n="trash" size={18} color="var(--gr-exp)"/></button>}</div></div>
         <div className="gr-pg-body">
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}><div style={{width:6,height:32,borderRadius:3,background:s.color||'var(--gr-acc)'}}/><div><div style={{fontSize:18,fontWeight:700}}>{s.title}</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>{s.date} {s.time||''}</div></div></div>
+          {s.location&&<div className="gr-det-section"><div className="gr-det-label">📍 장소</div><div style={{fontSize:14,color:'var(--gr-t2)'}}>{s.location}</div>{s.locationDetail&&s.locationDetail!==s.location&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:2}}>{s.locationDetail}</div>}</div>}
           {s.memo&&<div className="gr-det-section"><div className="gr-det-label">메모</div><div style={{fontSize:14,color:'var(--gr-t2)',whiteSpace:'pre-wrap'}}>{s.memo}</div></div>}
           {s.todos?.length>0&&<div className="gr-det-section"><div className="gr-det-label">할 일 ({s.todos.filter(t=>t.done).length}/{s.todos.length})</div>{s.todos.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}><div style={{width:18,height:18,borderRadius:'50%',border:'2px solid '+(t.done?'var(--gr-acc)':'var(--gr-brd)'),background:t.done?'var(--gr-acc)':'none',display:'flex',alignItems:'center',justifyContent:'center'}}>{t.done&&<I n="check" size={10} color="#fff"/>}</div><span style={{fontSize:14,textDecoration:t.done?'line-through':'none',color:t.done?'var(--gr-t3)':'var(--gr-text)'}}>{t.text}</span></div>)}</div>}
           {s.dday&&<div className="gr-det-section"><div className="gr-det-label">D-day</div><div style={{fontSize:24,fontWeight:800,color:'var(--gr-acc)'}}>D-{Math.max(0,Math.ceil((new Date(s.date)-new Date())/864e5))}</div></div>}
@@ -1644,6 +1645,12 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
   const [date,setDate]=useState(selDate);
   const [time,setTime]=useState('');
   const [memo,setMemo]=useState('');
+  const [location,setLocation]=useState('');
+  const [locationDetail,setLocationDetail]=useState('');
+  const [addrQuery,setAddrQuery]=useState('');
+  const [addrResults,setAddrResults]=useState([]);
+  const [addrSearching,setAddrSearching]=useState(false);
+  const [showAddrSearch,setShowAddrSearch]=useState(false);
   const [color,setColor]=useState(st.schCats[0]?.color||COLORS[0]);
   const [catId,setCatId]=useState(st.schCats[0]?.id||'');
   const [todos,setTodos]=useState([{id:shortId(),text:''}]);
@@ -1666,13 +1673,34 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
 
   const selectCat = (id) => { setCatId(id); const c=st.schCats.find(x=>x.id===id); if(c) setColor(c.color); };
 
+  const searchAddr = async () => {
+    if(!addrQuery.trim()) return;
+    setAddrSearching(true);
+    try {
+      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(addrQuery.trim())}&size=10`, {
+        headers: { Authorization: 'KakaoAK d9a2d59d493926282d498fc25fe6f603' }
+      });
+      const data = await res.json();
+      setAddrResults(data.documents || []);
+    } catch(e) { console.error('주소 검색 오류:', e); setAddrResults([]); }
+    setAddrSearching(false);
+  };
+
+  const selectAddr = (item) => {
+    setLocation(item.place_name || item.address_name);
+    setLocationDetail(item.road_address_name || item.address_name || '');
+    setShowAddrSearch(false);
+    setAddrResults([]);
+    setAddrQuery('');
+  };
+
   const save = async () => {
     if(!title.trim() || saving) return;
     setSaving(true);
     const bCats = bType==='expense' ? st.expCats : st.incCats;
     const bCatItem = bCats.find(c=>c.id===bCatId);
     const sch = {
-      id:uid(), title:title.trim(), date, time, memo, color, catId, images, createdAt:Date.now(), createdBy:userId,
+      id:uid(), title:title.trim(), date, time, memo, location: location||null, locationDetail: locationDetail||null, color, catId, images, createdAt:Date.now(), createdBy:userId,
       todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:false})) : [],
       dday: hasDday,
       repeat: hasRepeat ? {type:rpType, interval:parseInt(rpInterval)||1, endDate:rpEnd==='date'?rpEndDate:null} : null,
@@ -1709,6 +1737,36 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
           {rpEnd==='date'&&<input className="gr-input" type="date" value={rpEndDate} onChange={e=>setRpEndDate(e.target.value)} style={{marginTop:6}}/>}
         </div>}
       </div>}
+
+      <div className="gr-form-divider">
+        <div className="gr-pg-label" style={{marginTop:0}}><I n="pin" size={14}/> 장소</div>
+        {location ? (
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{flex:1,padding:'10px 12px',background:'var(--gr-bg)',borderRadius:10,fontSize:13}}>
+              <div style={{fontWeight:600}}>{location}</div>
+              {locationDetail && locationDetail!==location && <div style={{color:'var(--gr-t3)',fontSize:12,marginTop:2}}>{locationDetail}</div>}
+            </div>
+            <button className="gr-icon-btn" onClick={()=>{setLocation('');setLocationDetail('');}} style={{flexShrink:0}}><I n="close" size={16}/></button>
+          </div>
+        ) : showAddrSearch ? (
+          <div>
+            <div style={{display:'flex',gap:6}}>
+              <input className="gr-input" value={addrQuery} onChange={e=>setAddrQuery(e.target.value)} placeholder="장소명 또는 주소 검색" autoFocus onKeyDown={e=>{if(e.key==='Enter')searchAddr();}} style={{flex:1}}/>
+              <button className="gr-btn-sm" onClick={searchAddr} disabled={addrSearching} style={{whiteSpace:'nowrap',padding:'8px 14px',background:'var(--gr-acc)',color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer'}}>{addrSearching?'...':'검색'}</button>
+            </div>
+            {addrResults.length>0 && <div style={{maxHeight:200,overflowY:'auto',marginTop:6,border:'1px solid var(--gr-border)',borderRadius:10,background:'#fff'}}>
+              {addrResults.map((r,i)=> <div key={i} onClick={()=>selectAddr(r)} style={{padding:'10px 12px',cursor:'pointer',borderBottom:i<addrResults.length-1?'1px solid var(--gr-border)':'none',fontSize:13}} onMouseOver={e=>e.currentTarget.style.background='var(--gr-bg)'} onMouseOut={e=>e.currentTarget.style.background='#fff'}>
+                <div style={{fontWeight:600}}>{r.place_name}</div>
+                <div style={{color:'var(--gr-t3)',fontSize:12}}>{r.road_address_name||r.address_name}</div>
+              </div>)}
+            </div>}
+            {addrResults.length===0 && addrSearching===false && addrQuery && <div style={{padding:10,fontSize:13,color:'var(--gr-t3)',textAlign:'center'}}>검색 결과가 없습니다</div>}
+            <button onClick={()=>{setShowAddrSearch(false);setAddrResults([]);setAddrQuery('');}} style={{marginTop:6,fontSize:12,color:'var(--gr-t3)',background:'none',border:'none',cursor:'pointer'}}>취소</button>
+          </div>
+        ) : (
+          <button onClick={()=>setShowAddrSearch(true)} style={{width:'100%',padding:'10px 12px',border:'1.5px dashed var(--gr-border)',borderRadius:10,background:'none',color:'var(--gr-t3)',fontSize:13,cursor:'pointer',textAlign:'left'}}>📍 장소 검색하기</button>
+        )}
+      </div>
 
       {menus.memo && <div className="gr-form-divider">
         <div className="gr-pg-label" style={{marginTop:0}}>메모</div>
