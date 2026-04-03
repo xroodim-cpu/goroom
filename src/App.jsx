@@ -321,53 +321,70 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
 
-  useEffect(() => {
-    // 세션 체크 타임아웃 (5초) - 만료된 토큰으로 hang 방지
-    const timeout = setTimeout(() => { setAuthChecked(true); }, 5000);
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      clearTimeout(timeout);
-      if (session?.user) {
-        const u = session.user;
-        const meta = u.user_metadata || {};
-        const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
-        localStorage.setItem('goroom_user_id', u.id);
-        setUser({ id: u.id, email: u.email, nickname });
-      }
-      setAuthChecked(true);
-      // Clean up OAuth hash/query params after session is processed
-      if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    }).catch(() => { clearTimeout(timeout); setAuthChecked(true); });
-  }, []);
+  // 세션에서 유저 정보 추출 헬퍼
+  const extractUser = (session) => {
+    if (!session?.user) return null;
+    const u = session.user;
+    const meta = u.user_metadata || {};
+    const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
+    return { id: u.id, email: u.email, nickname, avatarUrl: meta.avatar_url || meta.picture || null };
+  };
 
-  // OAuth 리다이렉트 후 세션 감지 + goroom_users 자동 생성
   useEffect(() => {
+    let mounted = true;
+
+    // 1) onAuthStateChange 먼저 등록 — INITIAL_SESSION 이벤트로 세션 확인
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const u = session.user;
-        const meta = u.user_metadata || {};
-        const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
-        const avatarUrl = meta.avatar_url || meta.picture || null;
-        localStorage.setItem('goroom_user_id', u.id);
-        setUser({ id: u.id, email: u.email, nickname });
+      if (!mounted) return;
 
-        // goroom_users에 없으면 자동 생성
-        const { data: existing } = await supabase.from('goroom_users').select('id').eq('id', u.id).single();
-        if (!existing) {
-          const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
-          await supabase.from('goroom_users').insert({
-            id: u.id, nickname, status_msg: '', profile_img: avatarUrl,
-            profile_bg: null, link_code: linkCode, birthday: '',
-          });
+      if (event === 'INITIAL_SESSION') {
+        // 앱 로드 시 최초 세션 확인 (getSession 대체)
+        const info = extractUser(session);
+        if (info) {
+          localStorage.setItem('goroom_user_id', info.id);
+          setUser({ id: info.id, email: info.email, nickname: info.nickname });
+        }
+        setAuthChecked(true);
+        // OAuth hash 정리
+        if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
+          window.history.replaceState(null, '', window.location.pathname);
         }
       }
+
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+        const info = extractUser(session);
+        if (info) {
+          localStorage.setItem('goroom_user_id', info.id);
+          setUser({ id: info.id, email: info.email, nickname: info.nickname });
+
+          // SIGNED_IN일 때만 goroom_users 자동 생성
+          if (event === 'SIGNED_IN') {
+            const { data: existing } = await supabase.from('goroom_users').select('id').eq('id', info.id).single();
+            if (!existing) {
+              const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
+              await supabase.from('goroom_users').insert({
+                id: info.id, nickname: info.nickname, status_msg: '', profile_img: info.avatarUrl,
+                profile_bg: null, link_code: linkCode, birthday: '',
+              });
+            }
+          }
+        }
+        setAuthChecked(true);
+      }
+
       if (event === 'SIGNED_OUT') {
         localStorage.removeItem('goroom_user_id');
         setUser(null);
+        setAuthChecked(true);
       }
     });
-    return () => subscription.unsubscribe();
+
+    // 2) 안전망: 3초 뒤에도 authChecked가 false면 강제로 true (hang 방지)
+    const timeout = setTimeout(() => {
+      if (mounted) setAuthChecked(prev => { if (!prev) { console.warn('Auth check timeout — forcing authChecked'); return true; } return prev; });
+    }, 3000);
+
+    return () => { mounted = false; clearTimeout(timeout); subscription.unsubscribe(); };
   }, []);
 
   const handleLogin = (u) => setUser(u);
