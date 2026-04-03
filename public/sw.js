@@ -1,8 +1,11 @@
-const CACHE_NAME = 'goroom-v3';
+const CACHE_NAME = 'goroom-v4';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(STATIC_ASSETS)));
+  // 새 버전 설치 시 즉시 활성화
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(c => c.addAll(STATIC_ASSETS))
+  );
   self.skipWaiting();
 });
 
