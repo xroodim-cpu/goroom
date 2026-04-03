@@ -380,9 +380,20 @@ export default function App() {
       }
     });
 
-    // 2) 안전망: 3초 뒤에도 authChecked가 false면 강제로 true (hang 방지)
+    // 2) 안전망: 3초 뒤에도 authChecked가 false면 만료된 토큰 정리 후 강제 진행
     const timeout = setTimeout(() => {
-      if (mounted) setAuthChecked(prev => { if (!prev) { console.warn('Auth check timeout — forcing authChecked'); return true; } return prev; });
+      if (mounted) setAuthChecked(prev => {
+        if (!prev) {
+          console.warn('Auth check timeout — clearing stale tokens');
+          // 만료된/손상된 토큰이 hang의 원인이므로 정리
+          const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+          if (sbKey) localStorage.removeItem(sbKey);
+          localStorage.removeItem('goroom_user_id');
+          setUser(null);
+          return true;
+        }
+        return prev;
+      });
     }, 3000);
 
     return () => { mounted = false; clearTimeout(timeout); subscription.unsubscribe(); };
@@ -433,6 +444,8 @@ function AppMain({ authUser, onLogout }){
 
   /* ── Load data from Supabase on mount ── */
   useEffect(() => {
+    // 데이터 로딩 타임아웃 (8초) — hang 방지
+    const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout — forcing loading=false'); return false; } return prev; }); }, 8000);
     (async () => {
       try {
         // 1. Ensure user exists
@@ -553,9 +566,11 @@ function AppMain({ authUser, onLogout }){
       } catch (e) {
         console.error('Init error:', e);
       } finally {
+        clearTimeout(loadTimeout);
         setLoading(false);
       }
     })();
+    return () => clearTimeout(loadTimeout);
   }, [userId]);
 
   const openProfile = (id) => { setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
