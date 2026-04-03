@@ -1694,9 +1694,7 @@ function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
     if(!addrQuery.trim()) return;
     setAddrSearching(true);
     try {
-      const res = await fetch(`https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(addrQuery.trim())}&size=10`, {
-        headers: { Authorization: 'KakaoAK d9a2d59d493926282d498fc25fe6f603' }
-      });
+      const res = await fetch(`https://dyotbojxtcqhcmrefofb.supabase.co/functions/v1/kakao-search?query=${encodeURIComponent(addrQuery.trim())}&size=10`);
       const data = await res.json();
       setAddrResults(data.documents || []);
     } catch(e) { console.error('주소 검색 오류:', e); setAddrResults([]); }
