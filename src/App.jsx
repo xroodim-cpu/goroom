@@ -502,6 +502,15 @@ function AppMain({ authUser, onLogout }){
             todos: (tdByRoom[r.id]||[]).map(t => ({ id:t.id, text:t.text, done:t.done||false, createdAt:new Date(t.created_at||Date.now()).getTime(), createdBy:t.created_by, doneAt:t.done_at?new Date(t.done_at).getTime():null, doneBy:t.done_by||null })),
             diaries: (diByRoom[r.id]||[]).map(d => ({ id:d.id, title:'', content:d.content||'', mood:d.mood||'', weather:d.weather||'', images:d.images||[], likes:d.likes||[], comments:d.comments||[], date:fmt(new Date(d.created_at||Date.now())), createdAt:new Date(d.created_at||Date.now()).getTime(), createdBy:d.created_by })),
           }));
+          // 내 캘린더 존재 확인 — 없으면 자동 생성
+          if (!loadedRooms.some(r => r.isPersonal)) {
+            const roomId = uid();
+            await Promise.all([
+              supabase.from('goroom_rooms').insert({ id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정', is_personal: true, is_public: true, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: DEF_SETTINGS }),
+              supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' }),
+            ]);
+            loadedRooms.unshift({ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] });
+          }
           setRooms(loadedRooms);
         } else {
           const roomId = uid();
