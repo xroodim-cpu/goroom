@@ -395,9 +395,11 @@ export default function App() {
 function AppMain({ authUser, onLogout }){
   const bp = useBreakpoint();
   const isWide = bp === 'desktop' || bp === 'tablet';
-  const [tab, setTab] = useState('friends');
-  const [page, setPage] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
+  // sessionStorage에서 이전 페이지 상태 복원 (새로고침 시 현재 페이지 유지)
+  const saved = useMemo(() => { try { return JSON.parse(sessionStorage.getItem('gr_nav')||'{}'); } catch { return {}; } }, []);
+  const [tab, setTab] = useState(saved.tab || 'friends');
+  const [page, setPage] = useState(saved.page || null);
+  const [selectedId, setSelectedId] = useState(saved.selectedId || null);
   const [loading, setLoading] = useState(true);
 
   const userId = useMemo(() => getUserId(), []);
@@ -405,12 +407,17 @@ function AppMain({ authUser, onLogout }){
   const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:''});
   const [friends, setFriends] = useState([]);
   const [rooms, setRooms] = useState([]);
-  const [roomTab, setRoomTab] = useState('cal');
-  const [subPage, setSubPage] = useState(null);
+  const [roomTab, setRoomTab] = useState(saved.roomTab || 'cal');
+  const [subPage, setSubPage] = useState(saved.subPage || null);
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
   const [schDetail, setSchDetail] = useState(null);
   const [pageHistory, setPageHistory] = useState([]);
+
+  // 네비게이션 상태 sessionStorage 저장 (새로고침 시 복원)
+  useEffect(() => {
+    sessionStorage.setItem('gr_nav', JSON.stringify({ tab, page, selectedId, roomTab, subPage }));
+  }, [tab, page, selectedId, roomTab, subPage]);
 
   // 히스토리에 현재 상태 push
   const pushHistory = () => {
