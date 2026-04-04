@@ -419,12 +419,14 @@ function AppMain({ authUser, onLogout }){
     const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout'); return false; } return prev; }); }, 8000);
     (async () => {
       try {
+        console.log('[LOAD] start, userId=', userId);
         // 1~3 병렬: 유저 + 친구 + 방목록 동시 로드
         const [userRes, friendRes, memberRes] = await Promise.all([
           supabase.from('goroom_users').select('*').eq('id', userId).single(),
           supabase.from('goroom_friends').select('*').eq('user_id', userId),
           supabase.from('goroom_room_members').select('room_id, role').eq('user_id', userId),
         ]);
+        console.log('[LOAD] primary done, rooms:', (memberRes.data||[]).length, 'user:', !!userRes.data);
 
         // 유저 처리
         if (userRes.data) {
@@ -454,7 +456,9 @@ function AppMain({ authUser, onLogout }){
             supabase.from('goroom_diaries').select('*').in('room_id', roomIds),
           );
         }
+        console.log('[LOAD] secondary queries count:', secondaryQueries.length);
         const secondaryResults = await Promise.all(secondaryQueries);
+        console.log('[LOAD] secondary done, results:', secondaryResults.length);
         // 친구 처리
         if (friendRows.length > 0) {
           const friendUsers = secondaryResults[0].data || [];
@@ -483,6 +487,7 @@ function AppMain({ authUser, onLogout }){
             diaries: (diByRoom[r.id]||[]).map(d => ({ id:d.id, title:'', content:d.content||'', mood:d.mood||'', weather:d.weather||'', images:d.images||[], likes:d.likes||[], comments:d.comments||[], date:fmt(new Date(d.created_at||Date.now())), createdAt:new Date(d.created_at||Date.now()).getTime(), createdBy:d.created_by })),
           }));
           // 내 캘린더 존재 확인 — 없으면 자동 생성
+          console.log('[LOAD] checking 내캘린더, personal exists:', loadedRooms.some(r => r.isPersonal));
           if (!loadedRooms.some(r => r.isPersonal)) {
             const roomId = uid();
             await Promise.all([
@@ -491,6 +496,7 @@ function AppMain({ authUser, onLogout }){
             ]);
             loadedRooms.unshift({ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] });
           }
+          console.log('[LOAD] rooms loaded:', loadedRooms.length, loadedRooms.map(r=>r.name));
           setRooms(loadedRooms);
         } else {
           const roomId = uid();
@@ -499,7 +505,7 @@ function AppMain({ authUser, onLogout }){
           setRooms([{ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] }]);
         }
       } catch (e) {
-        console.error('Init error:', e);
+        console.error('[LOAD] Init error:', e);
         // 1회 재시도
         try {
           const { data: retryMembers } = await supabase.from('goroom_room_members').select('room_id').eq('user_id', userId);
@@ -515,8 +521,8 @@ function AppMain({ authUser, onLogout }){
               schedules: [], memos: [], todos: [], diaries: [],
             })));
           }
-        } catch(retryErr) { console.error('Retry failed:', retryErr); }
-      } finally { clearTimeout(loadTimeout); setLoading(false); }
+        } catch(retryErr) { console.error('[LOAD] Retry failed:', retryErr); }
+      } finally { console.log('[LOAD] finally — done'); clearTimeout(loadTimeout); setLoading(false); }
     })();
     return () => clearTimeout(loadTimeout);
   }, [userId]);
