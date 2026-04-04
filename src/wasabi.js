@@ -2,8 +2,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, Lis
 
 const WASABI_REGION = 'ap-northeast-2';
 const WASABI_ENDPOINT = 'https://s3.ap-northeast-2.wasabisys.com';
-const WASABI_BUCKET = 'ai.roodim.com';
-const WASABI_PREFIX = 'goroom'; // 기존 버킷 안에 goroom/ prefix로 분리
+const WASABI_BUCKET = 'goroom';
 
 const WASABI_ACCESS_KEY = '6YC5G09CURU5Q55R0ZGZ';
 const WASABI_SECRET_KEY = 'v2V77IXKNjlBCjIFceJ1Vp4X0t5SDLeVH6c3jYYB';
@@ -15,8 +14,7 @@ const s3 = new S3Client({
   forcePathStyle: true,
 });
 
-const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}/${WASABI_PREFIX}`;
-const prefixPath = (path) => `${WASABI_PREFIX}/${path}`;
+const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}`;
 
 /** 파일 업로드 → public URL 반환 */
 export async function uploadToWasabi(path, file) {
@@ -24,7 +22,7 @@ export async function uploadToWasabi(path, file) {
     const arrayBuffer = await file.arrayBuffer();
     await s3.send(new PutObjectCommand({
       Bucket: WASABI_BUCKET,
-      Key: prefixPath(path),
+      Key: path,
       Body: new Uint8Array(arrayBuffer),
       ContentType: file.type || 'image/jpeg',
     }));
@@ -35,14 +33,14 @@ export async function uploadToWasabi(path, file) {
 /** 단일 파일 삭제 */
 export async function deleteFromWasabi(path) {
   try {
-    await s3.send(new DeleteObjectCommand({ Bucket: WASABI_BUCKET, Key: prefixPath(path) }));
+    await s3.send(new DeleteObjectCommand({ Bucket: WASABI_BUCKET, Key: path }));
   } catch (e) { console.error('deleteFromWasabi error:', e); }
 }
 
 /** prefix 기반 폴더 전체 삭제 */
 export async function deleteFolderFromWasabi(folder) {
   try {
-    const list = await s3.send(new ListObjectsV2Command({ Bucket: WASABI_BUCKET, Prefix: prefixPath(folder) }));
+    const list = await s3.send(new ListObjectsV2Command({ Bucket: WASABI_BUCKET, Prefix: folder }));
     const objects = (list.Contents || []).map(o => ({ Key: o.Key }));
     if (objects.length === 0) return;
     await s3.send(new DeleteObjectsCommand({ Bucket: WASABI_BUCKET, Delete: { Objects: objects } }));
@@ -52,8 +50,8 @@ export async function deleteFolderFromWasabi(folder) {
 /** prefix로 파일 목록 조회 */
 export async function listFromWasabi(folder) {
   try {
-    const list = await s3.send(new ListObjectsV2Command({ Bucket: WASABI_BUCKET, Prefix: prefixPath(folder) }));
-    return (list.Contents || []).map(o => o.Key.replace(WASABI_PREFIX + '/', ''));
+    const list = await s3.send(new ListObjectsV2Command({ Bucket: WASABI_BUCKET, Prefix: folder }));
+    return (list.Contents || []).map(o => o.Key);
   } catch (e) { console.error('listFromWasabi error:', e); return []; }
 }
 
@@ -62,10 +60,10 @@ export async function moveInWasabi(fromPath, toPath) {
   try {
     await s3.send(new CopyObjectCommand({
       Bucket: WASABI_BUCKET,
-      CopySource: `${WASABI_BUCKET}/${prefixPath(fromPath)}`,
-      Key: prefixPath(toPath),
+      CopySource: `${WASABI_BUCKET}/${fromPath}`,
+      Key: toPath,
     }));
-    await s3.send(new DeleteObjectCommand({ Bucket: WASABI_BUCKET, Key: prefixPath(fromPath) }));
+    await s3.send(new DeleteObjectCommand({ Bucket: WASABI_BUCKET, Key: fromPath }));
   } catch (e) { console.error('moveInWasabi error:', e); }
 }
 
