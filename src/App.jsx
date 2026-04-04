@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase } from './supabase';
+import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, listFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
 
 const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,10);
 const shortId = () => Math.random().toString(36).slice(2, 10);
@@ -9,38 +10,11 @@ const DAYS = ['일','월','화','수','목','금','토'];
 const MO = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 const COLORS = ['#4A90D9','#F09819','#27AE60','#8E44AD','#E74C3C','#00B4D8','#E91E63','#009688','#795548','#607D8B'];
 
-const STORAGE_BUCKET = 'goroom';
-
-/* ── Supabase Storage Helpers ── */
-async function uploadFile(path, file) {
-  try {
-    const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, { upsert: true });
-    if (error) throw error;
-    return getPublicUrl(path);
-  } catch (e) { console.error('uploadFile error:', e); return null; }
-}
-
-async function deleteFile(path) {
-  try {
-    const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([path]);
-    if (error) throw error;
-  } catch (e) { console.error('deleteFile error:', e); }
-}
-
-async function deleteFolder(folder) {
-  try {
-    const { data } = await supabase.storage.from(STORAGE_BUCKET).list(folder);
-    if (data && data.length > 0) {
-      const paths = data.map(f => `${folder}/${f.name}`);
-      await supabase.storage.from(STORAGE_BUCKET).remove(paths);
-    }
-  } catch (e) { console.error('deleteFolder error:', e); }
-}
-
-function getPublicUrl(path) {
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-  return data?.publicUrl || '';
-}
+/* ── Wasabi Storage Helpers (Supabase Storage 대체) ── */
+const uploadFile = uploadToWasabi;
+const deleteFile = deleteFromWasabi;
+const deleteFolder = deleteFolderFromWasabi;
+const getPublicUrl = getWasabiUrl;
 
 async function fileToBlob(dataUrlOrFile) {
   if (dataUrlOrFile instanceof File || dataUrlOrFile instanceof Blob) return dataUrlOrFile;
@@ -624,32 +598,22 @@ function AppMain({ authUser, onLogout }){
 
       // Upload profile image if it's base64
       if (updatedMe.profileImg && updatedMe.profileImg.startsWith('data:')) {
-        // Delete old profile images
-        try {
-          const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`user/${userId}`, { search: 'profile_' });
-          if (oldFiles && oldFiles.length > 0) {
-            await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(f => `user/${userId}/${f.name}`));
-          }
-        } catch(e) {}
+        // 고정 키 덮어쓰기 (삭제 비용 0, 잔여파일 0)
         const blob = await fileToBlob(updatedMe.profileImg);
         if (blob) {
-          const path = `user/${userId}/profile_${Date.now()}.jpg`;
+          const path = `user/${userId}/profile.jpg`;
           profileImgUrl = await uploadFile(path, blob);
+          if (profileImgUrl) profileImgUrl = profileImgUrl + '?t=' + Date.now(); // 캐시 버스트
         }
       }
 
       // Upload background image if it's base64
       if (updatedMe.profileBg && updatedMe.profileBg.startsWith('data:')) {
-        try {
-          const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`user/${userId}`, { search: 'bg_' });
-          if (oldFiles && oldFiles.length > 0) {
-            await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(f => `user/${userId}/${f.name}`));
-          }
-        } catch(e) {}
         const blob = await fileToBlob(updatedMe.profileBg);
         if (blob) {
-          const path = `user/${userId}/bg_${Date.now()}.jpg`;
+          const path = `user/${userId}/bg.jpg`;
           profileBgUrl = await uploadFile(path, blob);
+          if (profileBgUrl) profileBgUrl = profileBgUrl + '?t=' + Date.now();
         }
       }
 
@@ -676,7 +640,7 @@ function AppMain({ authUser, onLogout }){
       if (img && img.startsWith('data:')) {
         const blob = await fileToBlob(img);
         if (blob) {
-          const path = `calendar/${roomId}/sch_${sch.id}_${i}_${Date.now()}.jpg`;
+          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.jpg`;
           const url = await uploadFile(path, blob);
           if (url) imageUrls.push(url);
         }
@@ -701,14 +665,26 @@ function AppMain({ authUser, onLogout }){
     return { ...sch, images: imageUrls };
   };
 
-  const deleteSchedule = async (roomId, schId, images) => {
+  const deleteSchedule = async (roomId, schId, images, scheduleData) => {
     try {
-      // Delete images from storage
+      // 이미지를 trash/로 이동
+      const trashPaths = [];
       if (images && images.length > 0) {
         for (const imgUrl of images) {
-          const path = imgUrl.split('/storage/v1/object/public/goroom/')[1];
-          if (path) await deleteFile(path);
+          const path = extractWasabiPath(imgUrl);
+          if (path) {
+            const trashPath = `trash/${path}`;
+            await moveInWasabi(path, trashPath);
+            trashPaths.push(trashPath);
+          }
         }
+      }
+      // 휴지통 DB 기록
+      if (scheduleData) {
+        await supabase.from('goroom_trash').insert({
+          user_id: userId, room_id: roomId, type: 'schedule',
+          original_data: scheduleData, image_paths: trashPaths,
+        });
       }
       await supabase.from('goroom_schedules').delete().eq('id', schId);
     } catch (e) { console.error('deleteSchedule error:', e); }
@@ -759,7 +735,7 @@ function AppMain({ authUser, onLogout }){
       if (img && img.startsWith('data:')) {
         const blob = await fileToBlob(img);
         if (blob) {
-          const path = `calendar/${roomId}/diary_${diary.id}_${i}_${Date.now()}.jpg`;
+          const path = `calendar/${roomId}/diary/${diary.id}/${i}_${Date.now()}.jpg`;
           const url = await uploadFile(path, blob);
           if (url) imageUrls.push(url);
         }
@@ -777,13 +753,24 @@ function AppMain({ authUser, onLogout }){
     return { ...diary, images: imageUrls };
   };
 
-  const deleteDiary = async (diaryId, images) => {
+  const deleteDiary = async (roomId, diaryId, images, diaryData) => {
     try {
+      const trashPaths = [];
       if (images && images.length > 0) {
         for (const imgUrl of images) {
-          const path = imgUrl.split('/storage/v1/object/public/goroom/')[1];
-          if (path) await deleteFile(path);
+          const path = extractWasabiPath(imgUrl);
+          if (path) {
+            const trashPath = `trash/${path}`;
+            await moveInWasabi(path, trashPath);
+            trashPaths.push(trashPath);
+          }
         }
+      }
+      if (diaryData) {
+        await supabase.from('goroom_trash').insert({
+          user_id: userId, room_id: roomId, type: 'diary',
+          original_data: diaryData, image_paths: trashPaths,
+        });
       }
       await supabase.from('goroom_diaries').delete().eq('id', diaryId);
     } catch (e) { console.error(e); }
@@ -808,8 +795,8 @@ function AppMain({ authUser, onLogout }){
       if (roomData.thumbnailFile) {
         const blob = await fileToBlob(roomData.thumbnailFile);
         if (blob) {
-          const path = `calendar/${roomId}/thumbnail_${Date.now()}.jpg`;
-          thumbnailUrl = await uploadFile(path, blob) || '';
+          const path = `calendar/${roomId}/thumbnail.jpg`;
+          thumbnailUrl = (await uploadFile(path, blob) || '') + '?t=' + Date.now();
         }
       }
       await supabase.from('goroom_rooms').insert({
@@ -905,7 +892,7 @@ function AppMain({ authUser, onLogout }){
       const pmName = s.budget?.pmId ? (st.paymentMethods || DEF_SETTINGS.paymentMethods).find(p=>p.id===s.budget.pmId)?.name || '' : '';
       return <div className="gr-panel">
         <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">스케줄 상세</div><div style={{display:'flex',gap:4}}>{room && <button className="gr-icon-btn" onClick={async ()=>{
-          await deleteSchedule(room.id, s.id, s.images);
+          await deleteSchedule(room.id, s.id, s.images, s);
           updateRoom(room.id, r=>({...r,schedules:r.schedules.filter(sc=>sc.id!==s.id)}));
           goBack();
         }}><I n="trash" size={18} color="var(--gr-exp)"/></button>}</div></div>
@@ -979,6 +966,7 @@ function AppMain({ authUser, onLogout }){
     if(page==='add-friend') return <AddFriendPage goBack={goBack} me={me} addFriendByCode={addFriendByCode} sb={sb}/>;
     if(page==='notification-settings') return <NotificationSettings goBack={goBack} sb={sb}/>;
     if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId} onLogout={onLogout}/>;
+    if(page==='trash') return <TrashPage goBack={goBack} sb={sb} userId={userId} rooms={rooms} setRooms={setRooms} updateRoom={updateRoom}/>;
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId); if(!room) return null;
@@ -1017,6 +1005,7 @@ function AppMain({ authUser, onLogout }){
         <div className="gr-more-item" onClick={()=>setPage('add-friend')}><I n="link" size={20}/><span>친구 추가 코드</span></div>
         <div className="gr-more-item" onClick={()=>setPage('notification-settings')}><I n="bell" size={20}/><span>알림 설정</span></div>
         <div className="gr-more-item" onClick={()=>setPage('app-settings')}><I n="gear" size={20}/><span>설정</span></div>
+        <div className="gr-more-item" onClick={()=>setPage('trash')}><I n="trash" size={20}/><span>휴지통</span></div>
       </div></>}
       <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{setTab('friends');if(isWide){openProfile(userId);}else{setPage(null);setSelectedId(null);}}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{setTab('rooms');if(isWide){const myRoom=rooms.find(r=>r.isPersonal);if(myRoom)openRoom(myRoom.id);}else{setPage(null);setSelectedId(null);}}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{setTab('more');if(isWide){setPage('my-info');}else{setPage(null);setSelectedId(null);}}}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>
@@ -1360,6 +1349,127 @@ function RoomMap({schedules,sel}){
   </div>;
 }
 
+function TrashPage({goBack, sb, userId, rooms, setRooms, updateRoom}) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('goroom_trash').select('*').eq('user_id', userId).order('deleted_at', { ascending: false });
+      setItems(data || []);
+      setLoading(false);
+    })();
+  }, [userId]);
+
+  const daysLeft = (deletedAt) => {
+    const d = new Date(deletedAt);
+    const expire = new Date(d.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const diff = Math.ceil((expire - new Date()) / (24 * 60 * 60 * 1000));
+    return Math.max(0, diff);
+  };
+
+  const restoreItem = async (item) => {
+    try {
+      // 이미지 복원: trash/ → 원래 경로
+      if (item.image_paths && item.image_paths.length > 0) {
+        for (const trashPath of item.image_paths) {
+          const originalPath = trashPath.replace(/^trash\//, '');
+          await moveInWasabi(trashPath, originalPath);
+        }
+      }
+      // DB 복원
+      const od = item.original_data;
+      if (item.type === 'schedule' && od) {
+        await supabase.from('goroom_schedules').insert({
+          id: od.id, room_id: item.room_id, created_by: od.createdBy || userId,
+          title: od.title, color: od.color, date: od.date, time: od.time || null,
+          cat_id: od.catId || null, memo: od.memo || null,
+          location: od.location || null, location_detail: od.locationDetail || null,
+          dday: od.dday || false, repeat: od.repeat || null,
+          alarm: od.alarm || null, budget: od.budget || null,
+          todos: od.todos || [],
+          images: (item.image_paths || []).map(p => getWasabiUrl(p.replace(/^trash\//, ''))),
+        });
+        // 로컬 상태 업데이트
+        if (updateRoom && item.room_id) {
+          updateRoom(item.room_id, r => ({
+            ...r, schedules: [...r.schedules, { ...od, images: (item.image_paths || []).map(p => getWasabiUrl(p.replace(/^trash\//, ''))) }]
+          }));
+        }
+      } else if (item.type === 'diary' && od) {
+        await supabase.from('goroom_diaries').insert({
+          id: od.id, room_id: item.room_id, created_by: od.createdBy || userId,
+          content: od.content || '', mood: od.mood || null, weather: od.weather || null,
+          images: (item.image_paths || []).map(p => getWasabiUrl(p.replace(/^trash\//, ''))),
+          likes: od.likes || [], comments: od.comments || [],
+        });
+        if (updateRoom && item.room_id) {
+          updateRoom(item.room_id, r => ({
+            ...r, diaries: [...r.diaries, { ...od, images: (item.image_paths || []).map(p => getWasabiUrl(p.replace(/^trash\//, ''))) }]
+          }));
+        }
+      } else if (item.type === 'memo' && od) {
+        await supabase.from('goroom_memos').insert({
+          id: od.id, room_id: item.room_id, created_by: od.createdBy || userId,
+          title: od.title, content: od.content || '', pinned: od.pinned || false,
+        });
+      } else if (item.type === 'todo' && od) {
+        await supabase.from('goroom_todos').insert({
+          id: od.id, room_id: item.room_id, created_by: od.createdBy || userId,
+          text: od.text, done: od.done || false,
+        });
+      }
+      // 휴지통에서 삭제
+      await supabase.from('goroom_trash').delete().eq('id', item.id);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      alert('복구되었습니다!');
+    } catch (e) { console.error('restore error:', e); alert('복구 실패'); }
+  };
+
+  const permanentDelete = async (item) => {
+    if (!confirm('영구 삭제하시겠습니까? 복구할 수 없습니다.')) return;
+    try {
+      // trash/ 이미지 영구 삭제
+      if (item.image_paths && item.image_paths.length > 0) {
+        for (const p of item.image_paths) await deleteFromWasabi(p);
+      }
+      await supabase.from('goroom_trash').delete().eq('id', item.id);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+    } catch (e) { console.error(e); }
+  };
+
+  const typeLabel = { schedule: '스케줄', diary: '일기', memo: '메모', todo: '할 일' };
+  const getTitle = (item) => {
+    const od = item.original_data;
+    if (!od) return '(알 수 없음)';
+    return od.title || od.text || od.content?.slice(0, 30) || '(제목 없음)';
+  };
+  const roomName = (roomId) => {
+    const r = rooms.find(rm => rm.id === roomId);
+    return r ? r.name : '';
+  };
+
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">휴지통</div></div>
+    <div className="gr-pg-body">
+      <div style={{fontSize:13,color:'var(--gr-t3)',marginBottom:16}}>삭제된 항목은 90일 후 자동으로 영구 삭제됩니다.</div>
+      {loading ? <div style={{textAlign:'center',padding:40}}><div className="gr-loading-spinner"/></div> :
+       items.length === 0 ? <div style={{textAlign:'center',padding:60,color:'var(--gr-t3)'}}>
+        <I n="trash" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:15}}>휴지통이 비어있습니다</div>
+      </div> :
+      items.map(item => <div key={item.id} style={{display:'flex',alignItems:'center',gap:12,padding:'14px 0',borderBottom:'1px solid var(--gr-brd)'}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:15,fontWeight:600}}>{getTitle(item)}</div>
+          <div style={{fontSize:12,color:'var(--gr-t3)',marginTop:2}}>
+            {typeLabel[item.type]||item.type} · {roomName(item.room_id)} · {daysLeft(item.deleted_at)}일 남음
+          </div>
+        </div>
+        <button onClick={()=>restoreItem(item)} style={{padding:'6px 12px',fontSize:13,background:'var(--gr-acc)',color:'#fff',border:'none',borderRadius:8,cursor:'pointer',fontWeight:600}}>복구</button>
+        <button onClick={()=>permanentDelete(item)} style={{padding:'6px 12px',fontSize:13,background:'none',color:'var(--gr-exp)',border:'1px solid var(--gr-exp)',borderRadius:8,cursor:'pointer'}}>삭제</button>
+      </div>)}
+    </div>
+  </div>;
+}
+
 function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,userId,onSchClick,saveSchedule,saveMemo,deleteMemo,updateMemoPin,saveTodo,deleteTodo,updateTodoDone,saveDiary,deleteDiary,updateDiaryLikes,updateDiaryComments,updateRoomInDb,deleteSchedule,deleteRoom,getName}){
   const [sel,setSel]=useState(new Date()); const [nav,setNav]=useState(new Date()); const today=useMemo(()=>new Date(),[]);
   const activeMenus=ALL_MENUS.filter(m=>room.menus[m.id]);
@@ -1397,19 +1507,16 @@ function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,u
     const f=e.target.files?.[0]; if(!f) return;
     setThumbUploading(true);
     try {
-      const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`calendar/${room.id}`, { search: 'thumbnail_' });
-      if(oldFiles&&oldFiles.length>0) await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(x=>`calendar/${room.id}/${x.name}`));
-      const path=`calendar/${room.id}/thumbnail_${Date.now()}.jpg`;
+      const path=`calendar/${room.id}/thumbnail.jpg`;
       const url=await uploadFile(path,f);
-      if(url){setThumbPreview(url);updateRoom(room.id,r=>({...r,thumbnailUrl:url}));await updateRoomInDb(room.id,{thumbnail_url:url});}
+      if(url){const finalUrl=url+'?t='+Date.now();setThumbPreview(finalUrl);updateRoom(room.id,r=>({...r,thumbnailUrl:finalUrl}));await updateRoomInDb(room.id,{thumbnail_url:finalUrl});}
     }catch(err){console.error(err);}
     setThumbUploading(false);
   };
   const handleThumbRemove=async()=>{
     setThumbUploading(true);
     try{
-      const { data: oldFiles } = await supabase.storage.from(STORAGE_BUCKET).list(`calendar/${room.id}`, { search: 'thumbnail_' });
-      if(oldFiles&&oldFiles.length>0) await supabase.storage.from(STORAGE_BUCKET).remove(oldFiles.map(x=>`calendar/${room.id}/${x.name}`));
+      await deleteFile(`calendar/${room.id}/thumbnail.jpg`);
       setThumbPreview('');updateRoom(room.id,r=>({...r,thumbnailUrl:''}));await updateRoomInDb(room.id,{thumbnail_url:null});
     }catch(err){console.error(err);}
     setThumbUploading(false);
