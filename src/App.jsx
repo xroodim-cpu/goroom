@@ -2281,12 +2281,12 @@ function AddRoomPage({goBack,setRooms,sb,friends,createRoom,userId}){
 const CSS = `
 :root{--gr-ff:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--gr-bg:#FFF;--gr-bg2:#F5F5F5;--gr-brd:#EBEBEB;--gr-text:#191919;--gr-t2:#666;--gr-t3:#999;--gr-acc:#FEE500;--gr-acc-d:#F5D800;--gr-acc-text:#191919;--gr-inc:#3182F6;--gr-exp:#F04452;--gr-r:12px;--gr-r-sm:8px;--gr-sidebar-w:360px;--gr-tr:150ms ease}
 *{margin:0;padding:0;box-sizing:border-box}
-.gr-root{height:100vh;overflow:hidden}
-.gr-layout-wide{display:flex;height:100vh;font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg)}
-.gr-layout-wide .gr-sidebar{width:var(--gr-sidebar-w);min-width:var(--gr-sidebar-w);border-right:1px solid var(--gr-brd);display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.gr-layout-wide .gr-main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
-.gr-sidebar{font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;line-height:1.5}
-.gr-panel{font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;line-height:1.5;position:relative}
+.gr-root{height:100dvh;height:100vh;overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0}
+.gr-layout-wide{display:flex;height:100%;font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg)}
+.gr-layout-wide .gr-sidebar{width:var(--gr-sidebar-w);min-width:var(--gr-sidebar-w);border-right:1px solid var(--gr-brd);display:flex;flex-direction:column;height:100%;overflow:hidden}
+.gr-layout-wide .gr-main{flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden}
+.gr-sidebar{font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg);height:100%;display:flex;flex-direction:column;overflow:hidden;font-size:14px;line-height:1.5}
+.gr-panel{font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg);height:100%;display:flex;flex-direction:column;overflow:hidden;font-size:14px;line-height:1.5;position:relative}
 .gr-empty-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .gr-icon-btn{background:none;border:none;cursor:pointer;color:var(--gr-text);padding:4px;display:flex}
 .gr-icon-btn-sm{background:none;border:none;cursor:pointer;padding:4px;display:flex;border-radius:4px}.gr-icon-btn-sm:hover{background:var(--gr-bg2)}.gr-icon-btn-sm.active{background:var(--gr-bg2)}
