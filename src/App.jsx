@@ -407,6 +407,12 @@ function AppMain({ authUser, onLogout }){
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
   const [schDetail, setSchDetail] = useState(null);
+  const [pageHistory, setPageHistory] = useState([]);
+
+  // 히스토리에 현재 상태 push
+  const pushHistory = () => {
+    setPageHistory(prev => [...prev, { page, selectedId, roomTab, subPage, tab }]);
+  };
 
   /* ── Load data from Supabase on mount ── */
   useEffect(() => {
@@ -492,7 +498,24 @@ function AppMain({ authUser, onLogout }){
           await supabase.from('goroom_room_members').insert({ room_id: roomId, user_id: userId, role: 'owner' });
           setRooms([{ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] }]);
         }
-      } catch (e) { console.error('Init error:', e);
+      } catch (e) {
+        console.error('Init error:', e);
+        // 1회 재시도
+        try {
+          const { data: retryMembers } = await supabase.from('goroom_room_members').select('room_id').eq('user_id', userId);
+          const retryIds = (retryMembers||[]).map(m => m.room_id);
+          if (retryIds.length > 0) {
+            const { data: retryRooms } = await supabase.from('goroom_rooms').select('*').in('id', retryIds);
+            setRooms((retryRooms||[]).map(r => ({
+              id: r.id, name: r.name, desc: r.description||'', isPersonal: r.is_personal||false, isPublic: r.is_public!==false,
+              thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
+              members: [], newCount: 0, nearestSchedule: null,
+              menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
+              settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
+              schedules: [], memos: [], todos: [], diaries: [],
+            })));
+          }
+        } catch(retryErr) { console.error('Retry failed:', retryErr); }
       } finally { clearTimeout(loadTimeout); setLoading(false); }
     })();
     return () => clearTimeout(loadTimeout);
@@ -550,18 +573,29 @@ function AppMain({ authUser, onLogout }){
     } catch(e) { console.error(e); alert('가입에 실패했습니다.'); }
   };
 
-  const openProfile = (id) => { setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
-  const openRoom = (id) => { setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
-  const goBack = () => { if(subPage){ setSubPage(null); } else {
-    // PC(와이드)에서는 탭 기본 페이지로 복귀, 모바일에서는 사이드바로
-    if(isWide) {
-      if(tab==='friends'){ setSelectedId(userId); setPage('profile'); }
-      else if(tab==='rooms'){ const myRoom=rooms.find(r=>r.isPersonal); if(myRoom){setSelectedId(myRoom.id);setRoomTab('cal');setPage('room');} else {setPage(null);setSelectedId(null);} }
-      else if(tab==='more'){ setPage('my-info'); setSelectedId(null); }
-      else { setPage(null); setSelectedId(null); }
-    } else { setPage(null); setSelectedId(null); }
+  const openProfile = (id) => { pushHistory(); setSelectedId(id); setPage(id===userId?'profile':'friend-profile'); };
+  const openRoom = (id) => { pushHistory(); setSelectedId(id); setRoomTab('cal'); setSubPage(null); setPage('room'); };
+  const goBack = () => {
+    if(subPage){ setSubPage(null); return; }
     setSchDetail(null);
-  }};
+    const prev = pageHistory[pageHistory.length - 1];
+    if (prev) {
+      setPageHistory(h => h.slice(0, -1));
+      setPage(prev.page);
+      setSelectedId(prev.selectedId);
+      setRoomTab(prev.roomTab);
+      setSubPage(prev.subPage);
+      if (prev.tab) setTab(prev.tab);
+    } else {
+      // 히스토리 없으면 기존 동작
+      if(isWide) {
+        if(tab==='friends'){ setSelectedId(userId); setPage('profile'); }
+        else if(tab==='rooms'){ const myRoom=rooms.find(r=>r.isPersonal); if(myRoom){setSelectedId(myRoom.id);setRoomTab('cal');setPage('room');} else {setPage(null);setSelectedId(null);} }
+        else if(tab==='more'){ setPage('my-info'); setSelectedId(null); }
+        else { setPage(null); setSelectedId(null); }
+      } else { setPage(null); setSelectedId(null); }
+    }
+  };
 
   // PC(와이드)에서만 초기 로드 시 탭 기본 페이지 설정
   useEffect(() => {
@@ -940,7 +974,7 @@ function AppMain({ authUser, onLogout }){
           </div>}
         </div>
         <div style={{padding:'0 20px'}}><div className="gr-divider-line" style={{margin:'12px 0'}}/><div style={{fontSize:13,fontWeight:600,color:'var(--gr-t2)',marginBottom:8}}>내 캘린더</div></div>
-        <MiniCal schedules={myRoom?.schedules||[]} onSchClick={(s)=>{setSchDetail(s);setPage('sch-detail');}}/>
+        <MiniCal schedules={myRoom?.schedules||[]} onSchClick={(s)=>{pushHistory();setSchDetail(s);setPage('sch-detail');}}/>
       </div>;
     }
 
@@ -970,7 +1004,7 @@ function AppMain({ authUser, onLogout }){
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId); if(!room) return null;
-      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);setPage('sch-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName}/>;
+      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{pushHistory();setSchDetail(s);setPage('sch-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName}/>;
     }
     if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
     return null;
@@ -978,7 +1012,7 @@ function AppMain({ authUser, onLogout }){
 
   const renderSidebar = () => (
     <div className="gr-sidebar">
-      {tab==='friends'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">친구</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn" onClick={()=>setPage('add-friend')}><I n="userPlus" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setSearchQ(searchQ?'':'.')}><I n="search" size={20}/></button></div></div>
+      {tab==='friends'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">친구</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn" onClick={()=>{pushHistory();setPage('add-friend');}}><I n="userPlus" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setSearchQ(searchQ?'':'.')}><I n="search" size={20}/></button></div></div>
         {searchQ!==''&&<div style={{padding:'0 20px 8px'}}><input className="gr-input" value={searchQ==='.'?'':searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="친구 검색" autoFocus style={{padding:'8px 12px',fontSize:13}}/></div>}
         <div className="gr-tab-body">
           <div className="gr-friend-me" onClick={()=>openProfile(userId)}><Avatar name={me.nickname} size={52} src={me.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{me.nickname}</div><div className="gr-friend-status">{me.statusMsg}</div></div></div>
@@ -999,13 +1033,13 @@ function AppMain({ authUser, onLogout }){
             </div>;
           })()}
         </div></>}
-      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>setPage('add-room')}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined} src={r.thumbnailUrl}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
+      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>{pushHistory();setPage('add-room');}}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined} src={r.thumbnailUrl}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
       {tab==='more'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">더보기</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body" style={{padding:20}}>
-        <div className="gr-more-item" onClick={()=>setPage('my-info')}><I n="info" size={20}/><span>내 정보</span></div>
-        <div className="gr-more-item" onClick={()=>setPage('add-friend')}><I n="link" size={20}/><span>친구 추가 코드</span></div>
-        <div className="gr-more-item" onClick={()=>setPage('notification-settings')}><I n="bell" size={20}/><span>알림 설정</span></div>
-        <div className="gr-more-item" onClick={()=>setPage('app-settings')}><I n="gear" size={20}/><span>설정</span></div>
-        <div className="gr-more-item" onClick={()=>setPage('trash')}><I n="trash" size={20}/><span>휴지통</span></div>
+        <div className="gr-more-item" onClick={()=>{pushHistory();setPage('my-info');}}><I n="info" size={20}/><span>내 정보</span></div>
+        <div className="gr-more-item" onClick={()=>{pushHistory();setPage('add-friend');}}><I n="link" size={20}/><span>친구 추가 코드</span></div>
+        <div className="gr-more-item" onClick={()=>{pushHistory();setPage('notification-settings');}}><I n="bell" size={20}/><span>알림 설정</span></div>
+        <div className="gr-more-item" onClick={()=>{pushHistory();setPage('app-settings');}}><I n="gear" size={20}/><span>설정</span></div>
+        <div className="gr-more-item" onClick={()=>{pushHistory();setPage('trash');}}><I n="trash" size={20}/><span>휴지통</span></div>
       </div></>}
       <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{setTab('friends');if(isWide){openProfile(userId);}else{setPage(null);setSelectedId(null);}}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{setTab('rooms');if(isWide){const myRoom=rooms.find(r=>r.isPersonal);if(myRoom)openRoom(myRoom.id);}else{setPage(null);setSelectedId(null);}}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{setTab('more');if(isWide){setPage('my-info');}else{setPage(null);setSelectedId(null);}}}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>

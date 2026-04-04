@@ -1,4 +1,4 @@
-const CACHE_NAME = 'goroom-v4';
+const CACHE_NAME = 'goroom-v5';
 const STATIC_ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (e) => {
