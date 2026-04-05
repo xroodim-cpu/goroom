@@ -34,6 +34,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [bCatId,setBCatId]=useState(editData?.budget?.catId||st.expCats[0]?.id||'');
   const [bPmId, setBPmId] = useState(editData?.budget?.pmId||paymentMethods[0]?.id||'');
   const [images,setImages]=useState(editData?.images||[]);
+  const [mood,setMood]=useState(editData?.mood||'');
   const [saving, setSaving] = useState(false);
   const handleImages=(e)=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setImages(p=>[...p,ev.target.result]);r.readAsDataURL(file);});};
   const removeImage=(idx)=>setImages(p=>p.filter((_,i)=>i!==idx));
@@ -66,7 +67,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
     const bCatItem = bCats.find(c=>c.id===bCatId);
     const sch = {
       id: isEdit ? editData.id : uid(),
-      title:title.trim(), date, time, memo, location: location||null, locationDetail: locationDetail||null, color, catId, images,
+      title:title.trim(), date, time, memo, mood, location: location||null, locationDetail: locationDetail||null, color, catId, images,
       createdAt: isEdit ? editData.createdAt : Date.now(),
       createdBy: isEdit ? editData.createdBy : userId,
       todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:t.done||false})) : [],
@@ -92,6 +93,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
     <div className="gr-pg-body">
       <div className="gr-pg-label" style={{marginTop:0}}>카테고리</div>
       <div className="gr-pills-scroll">{st.schCats.map(c=> <button key={c.id} className={`gr-pill-btn ${catId===c.id?'on':''}`} style={catId===c.id?{background:c.color,borderColor:c.color,color:'#fff'}:{}} onClick={()=>selectCat(c.id)}>{c.name}</button>)}</div>
+      <div className="gr-emoji-row" style={{marginBottom:8}}>{['😊','😢','😡','😴','🥰','😎','🤔','😱','🤗','😤'].map(e=> <button key={e} className={`gr-emoji-btn ${mood===e?'on':''}`} onClick={()=>setMood(mood===e?'':e)}>{e}</button>)}</div>
       <input className="gr-input lg" value={title} onChange={e=>setTitle(e.target.value)} placeholder="스케줄명을 입력하세요" autoFocus/>
       <div className="gr-form-row">
         <div className="gr-form-half"><div className="gr-pg-label"><I n="cal" size={14}/> 날짜</div><input className="gr-input" type="date" value={date} onChange={e=>setDate(e.target.value)}/></div>
@@ -142,10 +144,10 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
         )}
       </div>
 
-      {menus.memo && <div className="gr-form-divider">
-        <div className="gr-pg-label" style={{marginTop:0}}>메모</div>
-        <textarea className="gr-input" value={memo} onChange={e=>setMemo(e.target.value)} placeholder="메모 (선택)" rows={2} style={{resize:'none'}}/>
-      </div>}
+      <div className="gr-form-divider">
+        <div className="gr-pg-label" style={{marginTop:0}}>내용</div>
+        <textarea className="gr-input" value={memo} onChange={e=>setMemo(e.target.value)} placeholder="내용을 입력하세요 (선택)" rows={3} style={{resize:'none'}}/>
+      </div>
 
       {menus.todo && <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="check" size={14} color="#3B82F6"/> 할 일 체크리스트</div>

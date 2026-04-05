@@ -74,7 +74,7 @@ export default function RoomCal({nav,setNav,sel,setSel,today,schedules,onSchClic
   const getSchs=ds=>expandedSchs.filter(s=>s.date===ds).slice(0,4);
 
   return <div><div className="gr-cal-nav"><button className="gr-cal-nav-btn" onClick={()=>mv(-1)}><I n="left" size={18}/></button><h3>{y}년 {MO[m]}</h3><button className="gr-cal-nav-btn" onClick={()=>mv(1)}><I n="right" size={18}/></button></div><div className="gr-cal-head">{DAYS.map(d=><span key={d}>{d}</span>)}</div><div className="gr-cal-grid">{cells.map((c,i)=>{const ds=fmt(c.dt),dd=getSchs(ds); return <div key={i} className={`gr-cal-cell ${c.o?'ot':''} ${ds===ts?'tod':''} ${ds===ss&&ds!==ts?'sel':''}`} onClick={()=>setSel(c.dt)}><span className="gr-cal-d">{c.d}</span><div className="gr-cal-events">{dd.map((sc,j)=>sc.time
-    ?<div key={j} className="gr-cal-ev gr-cal-ev-time"><span className="gr-cal-ev-bar" style={{background:sc.color||'var(--gr-acc)'}}/><span className="gr-cal-ev-txt">{sc.title}</span></div>
-    :<div key={j} className="gr-cal-ev gr-cal-ev-allday" style={{background:sc.color||'var(--gr-acc)'}}><span className="gr-cal-ev-txt">{sc.title}</span></div>
+    ?<div key={j} className="gr-cal-ev gr-cal-ev-time"><span className="gr-cal-ev-bar" style={{background:sc.color||'var(--gr-acc)'}}/><span className="gr-cal-ev-txt">{sc.mood||''}{sc.title}</span></div>
+    :<div key={j} className="gr-cal-ev gr-cal-ev-allday" style={{background:sc.color||'var(--gr-acc)'}}><span className="gr-cal-ev-txt">{sc.mood||''}{sc.title}</span></div>
   )}</div></div>;})}</div><div className="gr-cal-sel-info"><div className="gr-cal-sel-date">{sel.getMonth()+1}월 {sel.getDate()}일 {DAYS[sel.getDay()]}요일</div>{selSchs.length===0?<div className="gr-cal-empty">스케줄이 없습니다</div>:selSchs.map((sc,i)=> <SchCard key={sc._recurring ? `${sc._origId}-${sc.date}` : sc.id} sc={sc} onClick={()=>onSchClick&&onSchClick(sc)}/>)}</div></div>;
 }

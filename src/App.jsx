@@ -65,11 +65,13 @@ function AppMain({ authUser, onLogout }){
 
   const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:''});
   const [friends, setFriends] = useState([]);
+  const [friendSuggestions, setFriendSuggestions] = useState([]); // 나를 추가한 사람들
   const [rooms, setRooms] = useState([]);
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
   const [schDetail, setSchDetail] = useState(null);
   const [friendSchs, setFriendSchs] = useState({});  // { friendId: schedules[] }
+  const [profilePopup, setProfilePopup] = useState(null); // {id,nickname,statusMsg,profileImg,profileBg}
 
   // URL에서 네비게이션 상태 파생
   const path = location.pathname;
@@ -97,8 +99,6 @@ function AppMain({ authUser, onLogout }){
     if (rmMemoNew) return { page: 'room', selectedId: rmMemoNew[1], subPage: 'add-memo' };
     const rmTodoNew = path.match(/^\/calendar\/([^/]+)\/todo\/new$/);
     if (rmTodoNew) return { page: 'room', selectedId: rmTodoNew[1], subPage: 'add-todo' };
-    const rmDiaryNew = path.match(/^\/calendar\/([^/]+)\/diary\/new$/);
-    if (rmDiaryNew) return { page: 'room', selectedId: rmDiaryNew[1], subPage: 'add-diary' };
     const rmBudgetNew = path.match(/^\/calendar\/([^/]+)\/budget\/new$/);
     if (rmBudgetNew) return { page: 'room', selectedId: rmBudgetNew[1], subPage: 'add-budget' };
     const rmTab = path.match(/^\/calendar\/([^/]+)\/([^/]+)$/);
@@ -134,7 +134,7 @@ function AppMain({ authUser, onLogout }){
     // Map old subPage names to URLs
     const subPageMap = { settings: 'settings', invite: 'invite',
       'add-schedule': 'schedule/new', 'add-memo': 'memo/new', 'add-todo': 'todo/new',
-      'add-diary': 'diary/new', 'add-budget': 'budget/new' };
+      'add-budget': 'budget/new' };
     if (selectedId && subPageMap[sp]) navigate(`/calendar/${selectedId}/${subPageMap[sp]}`);
   };
   const pushHistory = () => {}; // React Router handles history
@@ -148,11 +148,12 @@ function AppMain({ authUser, onLogout }){
     const sbPost = (table, body) => fetch(`${SB_URL}/${table}`, { method: 'POST', headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' }, body: JSON.stringify(body) }).then(r => r.json());
     (async () => {
       try {
-        // 1차 병렬: 유저 + 친구 + 방목록
-        const [userArr, friendRows, memberRows] = await Promise.all([
+        // 1차 병렬: 유저 + 친구 + 방목록 + 나를 추가한 사람
+        const [userArr, friendRows, memberRows, addedMeRows] = await Promise.all([
           sbGet(`/goroom_users?select=*&id=eq.${userId}`),
           sbGet(`/goroom_friends?select=*&user_id=eq.${userId}`),
           sbGet(`/goroom_room_members?select=room_id,role&user_id=eq.${userId}`),
+          sbGet(`/goroom_friends?select=*&friend_id=eq.${userId}`),
         ]);
 
         // 유저 처리
@@ -190,6 +191,16 @@ function AppMain({ authUser, onLogout }){
           const fm = {}; friendUsers.forEach(u => { fm[u.id] = u; });
           setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id }; }));
         }
+        // 친구추천 처리 (나를 추가했지만 내가 추가하지 않은 사람)
+        const myFriendIds = new Set(friendRows.map(fr => fr.friend_id));
+        const suggestIds = (addedMeRows||[]).filter(r => !myFriendIds.has(r.user_id)).map(r => r.user_id);
+        if (suggestIds.length > 0) {
+          const suggestUsers = await sbGet(`/goroom_users?select=*&id=in.(${suggestIds.join(',')})`);
+          setFriendSuggestions((suggestUsers||[]).map(u => ({
+            id: u.id, nickname: u.nickname||'?', statusMsg: u.status_msg||'',
+            profileImg: u.profile_img||null, profileBg: u.profile_bg||null,
+          })));
+        }
         // 방 처리
         if (roomIds.length > 0) {
           const [roomsArr, allMb, allSch, allMem, allTd, allDi] = secondaryResults.slice(1);
@@ -205,7 +216,7 @@ function AppMain({ authUser, onLogout }){
             members: (mbByRoom[r.id]||[]).map(m => ({id: m.user_id, role: m.role||'member'})), newCount: 0, nearestSchedule: null,
             menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
             settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
-            schedules: (schByRoom[r.id]||[]).map(s => ({ id:s.id, title:s.title, date:s.date, time:s.time||'', memo:s.memo||'', color:s.color||'#4A90D9', catId:s.cat_id||'', images:s.images||[], location:s.location||'', locationDetail:s.location_detail||'', createdAt:new Date(s.created_at||Date.now()).getTime(), createdBy:s.created_by, todos:s.todos||[], dday:s.dday||false, repeat:s.repeat||null, alarm:s.alarm||null, budget:s.budget||null, likes:s.likes||[] })),
+            schedules: (schByRoom[r.id]||[]).map(s => ({ id:s.id, title:s.title, date:s.date, time:s.time||'', memo:s.memo||'', mood:s.mood||'', color:s.color||'#4A90D9', catId:s.cat_id||'', images:s.images||[], location:s.location||'', locationDetail:s.location_detail||'', createdAt:new Date(s.created_at||Date.now()).getTime(), createdBy:s.created_by, todos:s.todos||[], dday:s.dday||false, repeat:s.repeat||null, alarm:s.alarm||null, budget:s.budget||null, likes:s.likes||[] })),
             memos: (memByRoom[r.id]||[]).map(m => ({ id:m.id, title:m.title, content:m.content||'', pinned:m.pinned||false, createdAt:new Date(m.created_at||Date.now()).getTime(), createdBy:m.created_by })),
             todos: (tdByRoom[r.id]||[]).map(t => ({ id:t.id, text:t.text, done:t.done||false, createdAt:new Date(t.created_at||Date.now()).getTime(), createdBy:t.created_by, doneAt:t.done_at?new Date(t.done_at).getTime():null, doneBy:t.done_by||null })),
             diaries: (diByRoom[r.id]||[]).map(d => ({ id:d.id, title:'', content:d.content||'', mood:d.mood||'', weather:d.weather||'', images:d.images||[], likes:d.likes||[], comments:d.comments||[], date:fmt(new Date(d.created_at||Date.now())), createdAt:new Date(d.created_at||Date.now()).getTime(), createdBy:d.created_by })),
@@ -280,7 +291,7 @@ function AppMain({ authUser, onLogout }){
         members: (allMembers||[]).map(m=>({id: m.user_id, role: m.role||'member'})), newCount:0, nearestSchedule:null,
         menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
         settings: {...DEF_SETTINGS,...(r.settings||{})},
-        schedules: (schedules||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',color:s.color||'#4A90D9',catId:s.cat_id||'',images:s.images||[],location:s.location||'',locationDetail:s.location_detail||'',createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by,todos:s.todos||[],dday:s.dday||false,repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,likes:s.likes||[]})),
+        schedules: (schedules||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',mood:s.mood||'',color:s.color||'#4A90D9',catId:s.cat_id||'',images:s.images||[],location:s.location||'',locationDetail:s.location_detail||'',createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by,todos:s.todos||[],dday:s.dday||false,repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,likes:s.likes||[]})),
         memos: (memos||[]).map(m=>({id:m.id,title:m.title,content:m.content||'',pinned:m.pinned||false,createdAt:new Date(m.created_at||Date.now()).getTime(),createdBy:m.created_by})),
         todos: (todos||[]).map(t=>({id:t.id,text:t.text,done:t.done||false,createdAt:new Date(t.created_at||Date.now()).getTime(),createdBy:t.created_by,doneAt:t.done_at?new Date(t.done_at).getTime():null,doneBy:t.done_by||null})),
         diaries: (diaries||[]).map(d=>({id:d.id,title:d.title,content:d.content||'',images:d.images||[],likes:d.likes||[],comments:d.comments||[],date:fmt(new Date(d.created_at||Date.now())),createdAt:new Date(d.created_at||Date.now()).getTime(),createdBy:d.created_by})),
@@ -400,7 +411,7 @@ function AppMain({ authUser, onLogout }){
     const row = {
       id: sch.id, room_id: roomId, created_by: userId,
       title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
-      cat_id: sch.catId || null, memo: sch.memo || null,
+      cat_id: sch.catId || null, memo: sch.memo || null, mood: sch.mood || null,
       location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
@@ -430,7 +441,7 @@ function AppMain({ authUser, onLogout }){
     }
     const row = {
       title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
-      cat_id: sch.catId || null, memo: sch.memo || null,
+      cat_id: sch.catId || null, memo: sch.memo || null, mood: sch.mood || null,
       location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
@@ -622,7 +633,24 @@ function AppMain({ authUser, onLogout }){
         updatedAt: null, _friendRowId: inserted?.id,
       }]);
       alert('친구가 추가되었습니다!');
-    } catch (e) { console.error('addFriend error:', e); alert('친구 추�� 실패'); }
+    } catch (e) { console.error('addFriend error:', e); alert('친구 추가 실패'); }
+  };
+
+  const addFriendById = async (friendId) => {
+    if (friends.find(f => f.id === friendId)) return;
+    try {
+      const friendArr = await sbGet(`/goroom_users?select=*&id=eq.${friendId}`);
+      const friendUser = friendArr?.[0];
+      if (!friendUser) return;
+      const insertedArr = await sbPost('goroom_friends', { user_id: userId, friend_id: friendId, favorite: false });
+      const inserted = insertedArr?.[0];
+      setFriends(prev => [...prev, {
+        id: friendUser.id, nickname: friendUser.nickname || '?', statusMsg: friendUser.status_msg || '',
+        isPublic: true, birthday: friendUser.birthday || '', favorite: false, bio: '',
+        profileImg: friendUser.profile_img || null, profileBg: friendUser.profile_bg || null,
+        updatedAt: null, _friendRowId: inserted?.id,
+      }]);
+    } catch (e) { console.error('addFriendById error:', e); }
   };
 
   const appCtx = useMemo(() => ({
@@ -698,7 +726,7 @@ function AppMain({ authUser, onLogout }){
           goBack();
         }}><I n="trash" size={18} color="var(--gr-exp)"/></button>}</div></div>
         <div className="gr-pg-body">
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}><div style={{width:6,height:32,borderRadius:3,background:s.color||'var(--gr-acc)'}}/><div><div style={{fontSize:18,fontWeight:700}}>{s.title}</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>{s.date} {s.time||''}</div></div></div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}><div style={{width:6,height:32,borderRadius:3,background:s.color||'var(--gr-acc)'}}/><div><div style={{fontSize:18,fontWeight:700}}>{s.mood&&<span>{s.mood} </span>}{s.title}</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>{s.date} {s.time||''}</div></div></div>
           {s.location&&<div className="gr-det-section"><div className="gr-det-label">📍 장소</div><div style={{fontSize:14,color:'var(--gr-t2)'}}>{s.location}</div>{s.locationDetail&&s.locationDetail!==s.location&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:2}}>{s.locationDetail}</div>}</div>}
           {s.memo&&<div className="gr-det-section"><div className="gr-det-label">메모</div><div style={{fontSize:14,color:'var(--gr-t2)',whiteSpace:'pre-wrap'}}>{s.memo}</div></div>}
           {s.todos?.length>0&&<div className="gr-det-section"><div className="gr-det-label">할 일 ({s.todos.filter(t=>t.done).length}/{s.todos.length})</div>{s.todos.map(t=><div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0'}}><div style={{width:18,height:18,borderRadius:'50%',border:'2px solid '+(t.done?'var(--gr-acc)':'var(--gr-brd)'),background:t.done?'var(--gr-acc)':'none',display:'flex',alignItems:'center',justifyContent:'center'}}>{t.done&&<I n="check" size={10} color="#fff"/>}</div><span style={{fontSize:14,textDecoration:t.done?'line-through':'none',color:t.done?'var(--gr-t3)':'var(--gr-text)'}}>{t.text}</span></div>)}</div>}
@@ -756,7 +784,7 @@ function AppMain({ authUser, onLogout }){
             const room = roomArr?.[0];
             if(room){
               const schs = await sbGet(`/goroom_schedules?select=*&room_id=eq.${room.id}`);
-              setFriendSchs(prev=>({...prev,[f.id]:(schs||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',color:s.color||'#4A90D9',images:s.images||[],location:s.location||'',repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by}))}));
+              setFriendSchs(prev=>({...prev,[f.id]:(schs||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',mood:s.mood||'',color:s.color||'#4A90D9',images:s.images||[],location:s.location||'',repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by}))}));
             } else { setFriendSchs(prev=>({...prev,[f.id]:[]})); }
           } catch(e){ setFriendSchs(prev=>({...prev,[f.id]:[]})); }
         })();
@@ -786,7 +814,7 @@ function AppMain({ authUser, onLogout }){
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId);
       if(!room) return <JoinRoomPrompt roomId={selectedId} userId={userId} joinRoom={joinRoom} goBack={goBack} sb={sb}/>;
-      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile}/>;
+      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile}/>;
     }
     if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
     return null;
@@ -807,6 +835,7 @@ function AppMain({ authUser, onLogout }){
             const updatedF=filtered.filter(f=>f.updatedAt&&(Date.now()-f.updatedAt)<86400000*7);
             const favF=filtered.filter(f=>f.favorite);
             return <div>
+              {friendSuggestions.length>0&&!q&&<div><div className="gr-section-label">👋 친구추천 {friendSuggestions.length}</div><div className="gr-suggest-scroll">{friendSuggestions.map(s=><div key={s.id} className="gr-suggest-card" onClick={()=>setProfilePopup(s)}><Avatar name={s.nickname} size={52} src={s.profileImg}/><div className="gr-suggest-name">{s.nickname}</div><button className="gr-suggest-add-btn" onClick={async(e)=>{e.stopPropagation();await addFriendById(s.id);setFriendSuggestions(prev=>prev.filter(x=>x.id!==s.id));}}>친구 추가</button></div>)}</div></div>}
               {birthdayF.length>0&&<div><div className="gr-section-label">🎂 생일인 친구 {birthdayF.length}</div>{birthdayF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} 🎂</div><div className="gr-friend-status">오늘 생일이에요!</div></div></div>)}</div>}
               {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
@@ -827,7 +856,29 @@ function AppMain({ authUser, onLogout }){
     </div>
   );
 
+  const ProfilePopup = () => {
+    if (!profilePopup) return null;
+    const p = profilePopup;
+    const isFriend = friends.some(f => f.id === p.id);
+    return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setProfilePopup(null)}>
+      <div style={{width:'90%',maxWidth:320,borderRadius:20,overflow:'hidden',background:'var(--gr-bg)'}} onClick={e=>e.stopPropagation()}>
+        <div style={{height:120,background:p.profileBg?`url(${p.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)',position:'relative'}}>
+          <button className="gr-icon-btn" onClick={()=>setProfilePopup(null)} style={{position:'absolute',top:8,right:8,color:'#fff'}}><I n="x" size={18}/></button>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'0 20px 20px',marginTop:-40}}>
+          <div style={{width:80,height:80,borderRadius:'50%',border:'3px solid var(--gr-bg)',overflow:'hidden',background:'var(--gr-bg2)'}}>
+            {p.profileImg?<img src={p.profileImg} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<Avatar name={p.nickname} size={80}/>}
+          </div>
+          <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{p.nickname}</div>
+          <div style={{fontSize:13,color:'var(--gr-t3)',marginTop:2}}>{p.statusMsg||''}</div>
+          {!isFriend && p.id!==userId && <button className="gr-suggest-add-btn" style={{marginTop:14,padding:'8px 28px',fontSize:13,borderRadius:20}} onClick={async()=>{await addFriendById(p.id);setFriendSuggestions(prev=>prev.filter(x=>x.id!==p.id));setProfilePopup(null);}}>친구 추가</button>}
+          {isFriend && <div style={{marginTop:14,fontSize:13,color:'var(--gr-t3)'}}>이미 친구입니다</div>}
+        </div>
+      </div>
+    </div>;
+  };
+
   const detail = renderDetail();
-  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
-  return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}{detail || renderSidebar()}</div></AppProvider>);
+  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}{profilePopup&&<ProfilePopup/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
+  return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}{profilePopup&&<ProfilePopup/>}{detail || renderSidebar()}</div></AppProvider>);
 }
