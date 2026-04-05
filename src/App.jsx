@@ -96,11 +96,11 @@ function AppMain({ authUser, onLogout }){
     const rmSchNew = path.match(/^\/calendar\/([^/]+)\/schedule\/new$/);
     if (rmSchNew) return { page: 'room', selectedId: rmSchNew[1], subPage: 'add-schedule' };
     const rmMemoNew = path.match(/^\/calendar\/([^/]+)\/memo\/new$/);
-    if (rmMemoNew) return { page: 'room', selectedId: rmMemoNew[1], subPage: 'add-memo' };
+    if (rmMemoNew) return { page: 'room', selectedId: rmMemoNew[1], subPage: 'add-memo', roomTab: 'memo' };
     const rmTodoNew = path.match(/^\/calendar\/([^/]+)\/todo\/new$/);
-    if (rmTodoNew) return { page: 'room', selectedId: rmTodoNew[1], subPage: 'add-todo' };
+    if (rmTodoNew) return { page: 'room', selectedId: rmTodoNew[1], subPage: 'add-todo', roomTab: 'todo' };
     const rmBudgetNew = path.match(/^\/calendar\/([^/]+)\/budget\/new$/);
-    if (rmBudgetNew) return { page: 'room', selectedId: rmBudgetNew[1], subPage: 'add-budget' };
+    if (rmBudgetNew) return { page: 'room', selectedId: rmBudgetNew[1], subPage: 'add-budget', roomTab: 'budget' };
     const rmTab = path.match(/^\/calendar\/([^/]+)\/([^/]+)$/);
     if (rmTab) return { page: 'room', selectedId: rmTab[1], roomTab: rmTab[2] };
     const rmBase = path.match(/^\/calendar\/([^/]+)$/);

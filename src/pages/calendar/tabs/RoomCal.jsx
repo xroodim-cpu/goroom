@@ -70,8 +70,9 @@ export default function RoomCal({nav,setNav,sel,setSel,today,schedules,onSchClic
   // 반복 스케줄 확장
   const expandedSchs = useMemo(() => expandRecurring(schedules, y, m), [schedules, y, m]);
 
-  const selSchs=expandedSchs.filter(s=>s.date===ss);
-  const getSchs=ds=>expandedSchs.filter(s=>s.date===ds).slice(0,4);
+  const visibleSchs=expandedSchs.filter(s=>!s.budget||s.budget.showInCal!==false);
+  const selSchs=visibleSchs.filter(s=>s.date===ss);
+  const getSchs=ds=>visibleSchs.filter(s=>s.date===ds).slice(0,4);
 
   return <div><div className="gr-cal-nav"><button className="gr-cal-nav-btn" onClick={()=>mv(-1)}><I n="left" size={18}/></button><h3>{y}년 {MO[m]}</h3><button className="gr-cal-nav-btn" onClick={()=>mv(1)}><I n="right" size={18}/></button></div><div className="gr-cal-head">{DAYS.map(d=><span key={d}>{d}</span>)}</div><div className="gr-cal-grid">{cells.map((c,i)=>{const ds=fmt(c.dt),dd=getSchs(ds); return <div key={i} className={`gr-cal-cell ${c.o?'ot':''} ${ds===ts?'tod':''} ${ds===ss&&ds!==ts?'sel':''}`} onClick={()=>setSel(c.dt)}><span className="gr-cal-d">{c.d}</span><div className="gr-cal-events">{dd.map((sc,j)=>sc.time
     ?<div key={j} className="gr-cal-ev gr-cal-ev-time"><span className="gr-cal-ev-bar" style={{background:sc.color||'var(--gr-acc)'}}/><span className="gr-cal-ev-txt">{sc.mood||''}{sc.title}</span></div>

@@ -42,8 +42,9 @@ export default function MiniCal({schedules,onSchClick}){
   const mv=d=>{const n=new Date(nav);n.setMonth(n.getMonth()+d);setNav(n);}; const ts=fmt(today); const ss=fmt(sel);
 
   const expandedSchs = useMemo(() => expandRecurring(schedules, y, m), [schedules, y, m]);
-  const getSchs=ds=>expandedSchs.filter(s=>s.date===ds).slice(0,4);
-  const selSchs=expandedSchs.filter(s=>s.date===ss);
+  const visibleSchs=expandedSchs.filter(s=>!s.budget||s.budget.showInCal!==false);
+  const getSchs=ds=>visibleSchs.filter(s=>s.date===ds).slice(0,4);
+  const selSchs=visibleSchs.filter(s=>s.date===ss);
 
   return <div style={{flex:1,overflowY:'auto'}}>
     <div className="gr-cal-nav"><button className="gr-cal-nav-btn" onClick={()=>mv(-1)}><I n="left" size={18}/></button><h3>{y}년 {MO[m]}</h3><button className="gr-cal-nav-btn" onClick={()=>mv(1)}><I n="right" size={18}/></button></div>

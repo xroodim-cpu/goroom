@@ -13,7 +13,7 @@
 .gr-header-info{flex:1;display:flex;align-items:center;gap:10px}
 .gr-lock{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:8px;padding:40px}
 /* 프로필 */
-.gr-profile-bg{position:relative;height:140px;display:flex;align-items:flex-start;justify-content:flex-end;padding:12px;overflow:hidden;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+.gr-profile-bg{position:relative;aspect-ratio:1/1;width:100%;display:flex;align-items:flex-start;justify-content:flex-end;padding:12px;overflow:hidden;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
 .gr-profile-top-bar{position:absolute;top:12px;right:12px;display:flex;align-items:center;gap:6px;z-index:2}
 .gr-profile-top-btn{background:rgba(255,255,255,.85);border:none;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
 .gr-profile-top-btn-s{background:rgba(255,255,255,.85);border:none;border-radius:20px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);display:flex;align-items:center;gap:4px}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import I from '../../components/shared/Icon';
+import Toggle from '../../components/shared/Toggle';
 import { uid, fmt, DEF_SETTINGS } from '../../lib/helpers';
 
 export default function BudgetForm({goBack,room,updateRoom,sb,saveSchedule,userId}){
@@ -8,6 +9,7 @@ export default function BudgetForm({goBack,room,updateRoom,sb,saveSchedule,userI
   const [title,setTitle]=useState(''); const [amount,setAmount]=useState(''); const [type,setType]=useState('expense');
   const [bCatId,setBCatId]=useState(st.expCats[0]?.id||'');
   const [bPmId,setBPmId]=useState(paymentMethods[0]?.id||'');
+  const [showInCal,setShowInCal]=useState(true);
   const [saving,setSaving]=useState(false);
 
   const save=async ()=>{
@@ -18,7 +20,7 @@ export default function BudgetForm({goBack,room,updateRoom,sb,saveSchedule,userI
     const sch = {
       id:uid(),title:title.trim(),date:fmt(new Date()),time:'',memo:'',
       color:type==='income'?'#3182F6':'#F04452',
-      budget:{type,amount:Number(amount),catId:bCatId,bCatName:bCatItem?.name||'',pmId:bPmId},
+      budget:{type,amount:Number(amount),catId:bCatId,bCatName:bCatItem?.name||'',pmId:bPmId,showInCal},
       createdAt:Date.now(),createdBy:userId,images:[],todos:[],
     };
     const savedSch = await saveSchedule(room.id, sch);
@@ -38,6 +40,7 @@ export default function BudgetForm({goBack,room,updateRoom,sb,saveSchedule,userI
       <div className="gr-pills-scroll">{(type==='expense'?st.expCats:st.incCats).map(c=> <button key={c.id} className={`gr-pill-btn ${bCatId===c.id?'on':''}`} style={bCatId===c.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBCatId(c.id)}>{c.name}</button>)}</div>
       <div className="gr-pg-label">결제수단</div>
       <div className="gr-pills-scroll">{paymentMethods.map(pm=> <button key={pm.id} className={`gr-pill-btn ${bPmId===pm.id?'on':''}`} style={bPmId===pm.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBPmId(pm.id)}>{pm.name}</button>)}</div>
+      <div className="gr-form-sec-row" style={{marginTop:16}}><span className="gr-form-sec-title"><I n="cal" size={14}/> 캘린더에 표시</span><Toggle on={showInCal} toggle={()=>setShowInCal(!showInCal)}/></div>
     </div>
     <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||!amount||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
   </div>;

@@ -33,6 +33,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [bAmt,setBAmt]=useState(editData?.budget?.amount?String(editData.budget.amount):'');
   const [bCatId,setBCatId]=useState(editData?.budget?.catId||st.expCats[0]?.id||'');
   const [bPmId, setBPmId] = useState(editData?.budget?.pmId||paymentMethods[0]?.id||'');
+  const [bShowInCal, setBShowInCal] = useState(editData?.budget?.showInCal!==false);
   const [images,setImages]=useState(editData?.images||[]);
   const [mood,setMood]=useState(editData?.mood||'');
   const [saving, setSaving] = useState(false);
@@ -74,7 +75,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
       dday: hasDday,
       repeat: hasRepeat ? {type:rpType, interval:parseInt(rpInterval)||1, endDate:rpEnd==='date'?rpEndDate:null} : null,
       alarm: menus.alarm && alBefore ? {before:alBefore, message:alMsg} : null,
-      budget: menus.budget && bAmt ? {type:bType, amount:Number(bAmt), catId:bCatId, bCatName:bCatItem?.name||'', pmId:bPmId} : null,
+      budget: menus.budget && bAmt ? {type:bType, amount:Number(bAmt), catId:bCatId, bCatName:bCatItem?.name||'', pmId:bPmId, showInCal:bShowInCal} : null,
     };
     let savedSch;
     if (isEdit && updateSchedule) {
@@ -177,6 +178,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
         <div className="gr-pills-scroll">{(bType==='expense'?st.expCats:st.incCats).map(c=> <button key={c.id} className={`gr-pill-btn ${bCatId===c.id?'on':''}`} style={bCatId===c.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBCatId(c.id)}>{c.name}</button>)}</div>
         <div className="gr-pg-label">결제수단</div>
         <div className="gr-pills-scroll">{paymentMethods.map(pm=> <button key={pm.id} className={`gr-pill-btn ${bPmId===pm.id?'on':''}`} style={bPmId===pm.id?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setBPmId(pm.id)}>{pm.name}</button>)}</div>
+        <div className="gr-form-sec-row" style={{marginTop:8}}><span className="gr-form-sec-title"><I n="cal" size={14}/> 캘린더에 표시</span><Toggle on={bShowInCal} toggle={()=>setBShowInCal(!bShowInCal)}/></div>
       </div>}
 
       <div className="gr-form-divider">
