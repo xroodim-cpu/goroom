@@ -21,13 +21,19 @@ export function AuthProvider({ children }) {
     let mounted = true;
     let resolved = false;
 
-    // OAuth hash 정리
+    // OAuth 에러/토큰 감지 및 정리
+    console.log('[GoRoom Auth] Init — hash:', window.location.hash.substring(0, 100), 'search:', window.location.search);
+    if (window.location.search.includes('error')) {
+      console.error('[GoRoom Auth] OAuth error in URL:', window.location.search);
+    }
     if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
+      console.log('[GoRoom Auth] Cleaning up URL hash/search');
       window.history.replaceState(null, '', window.location.pathname);
     }
 
     // onAuthStateChange만 사용 — getSession() 동시 호출 시 내부 lock 경합으로 deadlock 발생
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[GoRoom Auth] Event:', event, 'hasSession:', !!session, 'hasUser:', !!session?.user);
       if (!mounted) return;
       if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
         setUserFromSession(session);

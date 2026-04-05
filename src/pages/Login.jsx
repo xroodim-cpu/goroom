@@ -51,12 +51,18 @@ export default function LoginPage({ onLogin }) {
         opts.scopes = 'profile_nickname profile_image';
         opts.queryParams = { scope: 'profile_nickname profile_image' };
       }
-      const { error: err } = await supabase.auth.signInWithOAuth({
+      console.log('[GoRoom] OAuth start:', provider, opts);
+      const { data, error: err } = await supabase.auth.signInWithOAuth({
         provider,
         options: opts,
       });
+      console.log('[GoRoom] OAuth result:', { data, error: err });
       if (err) throw err;
-    } catch (e) { setError(e.message); setLoading(false); }
+    } catch (e) {
+      console.error('[GoRoom] OAuth error:', e);
+      setError(e.message);
+      setLoading(false);
+    }
   };
 
   const handlePinLogin = () => {
