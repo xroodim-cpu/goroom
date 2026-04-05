@@ -4,6 +4,7 @@ import Avatar from '../../../components/shared/Avatar';
 import ImageViewer from '../../../components/shared/ImageViewer';
 import DiarySlider from '../../../components/shared/DiarySlider';
 import { fmtTime, shortId, canEdit } from '../../../lib/helpers';
+import { sbPatch } from '../../../supabase';
 
 export default function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick,updateDiaryLikes,updateDiaryComments,userId,myRole}){
   const [commentText,setCommentText]=useState('');
@@ -11,17 +12,20 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
   const [viewerIdx,setViewerIdx]=useState(0);
   const [replyTo,setReplyTo]=useState(null);
 
-  const toggleLike=async (did,e)=>{
+  const toggleLike=async (item,e)=>{
     e.stopPropagation();
-    let newLikes;
-    updateRoom(room.id,r=>({...r,diaries:r.diaries.map(d=>{
-      if(d.id!==did) return d;
-      const likes=d.likes||[];
-      const already=likes.includes(userId);
-      newLikes = already?likes.filter(x=>x!==userId):[...likes,userId];
-      return {...d,likes:newLikes};
-    })}));
-    if(newLikes) await updateDiaryLikes(did, newLikes);
+    const isDiary = item._type==='diary';
+    const likes = item.likes||[];
+    const already = likes.includes(userId);
+    const newLikes = already?likes.filter(x=>x!==userId):[...likes,userId];
+
+    if(isDiary){
+      updateRoom(room.id,r=>({...r,diaries:r.diaries.map(d=>d.id===item.id?{...d,likes:newLikes}:d)}));
+      await updateDiaryLikes(item.id, newLikes);
+    } else {
+      updateRoom(room.id,r=>({...r,schedules:r.schedules.map(s=>s.id===item.id?{...s,likes:newLikes}:s)}));
+      await sbPatch(`/goroom_schedules?id=eq.${item.id}`,{likes:newLikes});
+    }
   };
   const addComment=async (did)=>{
     if(!commentText.trim()) return;
@@ -37,11 +41,10 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
   };
   const share=(item,e)=>{
     e.stopPropagation();
-    const text=item._type==='schedule'
-      ? `${item.title||''}\n${item.date} ${item.time||''}`
-      : `${item.mood||''}${item.weather||''} ${item.title||''}\n${item.content?.slice(0,100)||''}`;
-    if(navigator.share) navigator.share({title:item.title||'',text}).catch(()=>{});
-    else {navigator.clipboard?.writeText(text);alert('복사됨!');}
+    const link = `${window.location.origin}/calendar/${room.id}/cal`;
+    const text = `${item.title||room.name||'구롬'}\n${link}`;
+    if(navigator.share) navigator.share({title:item.title||room.name||'구롬',text,url:link}).catch(()=>{});
+    else {navigator.clipboard?.writeText(link);alert('링크가 복사되었습니다!');}
   };
 
   const feed = useMemo(()=>{
@@ -62,6 +65,8 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
       const imgs = item.images||[];
       const author = getName(item.createdBy||userId);
       const time = item.createdAt?fmtTime(item.createdAt):(item.date||'');
+      const liked = (item.likes||[]).includes(userId);
+      const likeCount = (item.likes||[]).length;
 
       return <div key={(isSch?'s-':'')+item.id} className="gr-thr-post">
         {/* Header: avatar + name + time + more */}
@@ -93,21 +98,17 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
           </>}
         </div>
 
-        {/* Images slider */}
-        {imgs.length>0&&<DiarySlider images={imgs} onImgClick={(i)=>{setViewerImgs(imgs);setViewerIdx(i);}}/>}
+        {/* Images slider - full width */}
+        {imgs.length>0&&<DiarySlider images={imgs} full onImgClick={(i)=>{setViewerImgs(imgs);setViewerIdx(i);}}/>}
 
-        {/* Actions: like, comment, share, (schedule: detail link) */}
+        {/* Actions: like, share, (schedule: detail link) */}
         <div className="gr-thr-post-actions">
-          {isDiary&&<button className="gr-thr-act-btn" onClick={e=>toggleLike(item.id,e)}>
-            {(item.likes||[]).includes(userId)
+          <button className="gr-thr-act-btn" onClick={e=>toggleLike(item,e)}>
+            {liked
               ? <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--gr-exp)" stroke="var(--gr-exp)" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
               : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gr-t3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>}
-            <span>{(item.likes||[]).length||''}</span>
-          </button>}
-          {isDiary&&<button className="gr-thr-act-btn" onClick={e=>{e.stopPropagation();setReplyTo(replyTo===item.id?null:item.id);}}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gr-t3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-            <span>{(item.comments||[]).length||''}</span>
-          </button>}
+            <span>{likeCount||''}</span>
+          </button>
           <button className="gr-thr-act-btn" onClick={e=>share(item,e)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gr-t3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
