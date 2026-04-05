@@ -12,8 +12,9 @@ export function AuthProvider({ children }) {
     const u = session.user;
     const meta = u.user_metadata || {};
     const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
+    const providers = u.app_metadata?.providers || [];
     localStorage.setItem('goroom_user_id', u.id);
-    setUser({ id: u.id, email: u.email, nickname });
+    setUser({ id: u.id, email: u.email, nickname, providers });
     return true;
   };
 

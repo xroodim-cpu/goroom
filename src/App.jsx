@@ -336,6 +336,12 @@ function AppMain({ authUser, onLogout }){
     return f?.nickname || '?';
   }, [userId, me.nickname, friends]);
 
+  const getProfile = useCallback((id) => {
+    if (id === userId) return { name: me.nickname || '나', img: me.profileImg };
+    const f = friends.find(x => x.id === id);
+    return { name: f?.nickname || '?', img: f?.profileImg || null };
+  }, [userId, me.nickname, me.profileImg, friends]);
+
   /* ── Profile save ── */
   const saveProfile = async (updatedMe) => {
     try {
@@ -624,7 +630,7 @@ function AppMain({ authUser, onLogout }){
     bp, isWide, tab, setTab, page, setPage, selectedId, setSelectedId,
     roomTab, setRoomTab, subPage, setSubPage, searchQ, setSearchQ,
     editProfile, setEditProfile, schDetail, setSchDetail,
-    openProfile, openRoom, goBack, pushHistory, updateRoom, getName, toggleFav,
+    openProfile, openRoom, goBack, pushHistory, updateRoom, getName, getProfile, toggleFav,
     saveProfile, saveSchedule, updateScheduleInDb, deleteSchedule, saveMemo, deleteMemo, updateMemoPin,
     saveTodo, deleteTodo, updateTodoDone, saveDiary, deleteDiary,
     updateDiaryLikes, updateDiaryComments, updateRoomInDb, createRoom, deleteRoom,
@@ -780,7 +786,7 @@ function AppMain({ authUser, onLogout }){
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId);
       if(!room) return <JoinRoomPrompt roomId={selectedId} userId={userId} joinRoom={joinRoom} goBack={goBack} sb={sb}/>;
-      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName}/>;
+      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile}/>;
     }
     if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
     return null;
