@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
-import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob } from './lib/helpers';
+import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage } from './lib/helpers';
 import I from './components/shared/Icon';
 import Avatar from './components/shared/Avatar';
 import Toggle from './components/shared/Toggle';
@@ -106,6 +106,7 @@ function AppMain({ authUser, onLogout }){
     if (path === '/more/settings') return { page: 'app-settings' };
     if (path === '/more/trash') return { page: 'trash' };
     if (path === '/schedule-detail') return { page: 'sch-detail' };
+    if (path === '/schedule-edit') return { page: 'sch-edit' };
     return { page: null, selectedId: null };
   };
   const nav = deriveNav();
@@ -196,7 +197,7 @@ function AppMain({ authUser, onLogout }){
           const loadedRooms = (roomsArr||[]).map(r => ({
             id: r.id, name: r.name, desc: r.description||'', isPersonal: r.is_personal||false, isPublic: r.is_public!==false,
             thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
-            members: (mbByRoom[r.id]||[]).map(m => m.user_id), newCount: 0, nearestSchedule: null,
+            members: (mbByRoom[r.id]||[]).map(m => ({id: m.user_id, role: m.role||'member'})), newCount: 0, nearestSchedule: null,
             menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
             settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
             schedules: (schByRoom[r.id]||[]).map(s => ({ id:s.id, title:s.title, date:s.date, time:s.time||'', memo:s.memo||'', color:s.color||'#4A90D9', catId:s.cat_id||'', images:s.images||[], location:s.location||'', locationDetail:s.location_detail||'', createdAt:new Date(s.created_at||Date.now()).getTime(), createdBy:s.created_by, todos:s.todos||[], dday:s.dday||false, repeat:s.repeat||null, alarm:s.alarm||null, budget:s.budget||null })),
@@ -211,7 +212,7 @@ function AppMain({ authUser, onLogout }){
               sbPost('goroom_rooms', { id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정', is_personal: true, is_public: true, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: DEF_SETTINGS }),
               sbPost('goroom_room_members', { room_id: roomId, user_id: userId, role: 'owner' }),
             ]);
-            loadedRooms.unshift({ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] });
+            loadedRooms.unshift({ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [{id:userId,role:'owner'}], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] });
           }
           setRooms(loadedRooms);
         } else {
@@ -221,7 +222,7 @@ function AppMain({ authUser, onLogout }){
             sbPost('goroom_rooms', { id: roomId, owner_id: userId, name: '내 캘린더', description: '개인 일정', is_personal: true, is_public: true, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: DEF_SETTINGS }),
             sbPost('goroom_room_members', { room_id: roomId, user_id: userId, role: 'owner' }),
           ]);
-          setRooms([{ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [userId], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] }]);
+          setRooms([{ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [{id:userId,role:'owner'}], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] }]);
         }
       } catch (e) {
         console.error('Load error:', e);
@@ -260,7 +261,7 @@ function AppMain({ authUser, onLogout }){
       // 방 데이터 병렬 로드
       const [rArr, allMembers, schedules, memos, todos, diaries] = await Promise.all([
         sbGet(`/goroom_rooms?select=*&id=eq.${roomId}`),
-        sbGet(`/goroom_room_members?select=user_id&room_id=eq.${roomId}`),
+        sbGet(`/goroom_room_members?select=user_id,role&room_id=eq.${roomId}`),
         sbGet(`/goroom_schedules?select=*&room_id=eq.${roomId}`),
         sbGet(`/goroom_memos?select=*&room_id=eq.${roomId}`),
         sbGet(`/goroom_todos?select=*&room_id=eq.${roomId}`),
@@ -271,7 +272,7 @@ function AppMain({ authUser, onLogout }){
       const newRoom = {
         id: r.id, name: r.name, desc: r.description||'', isPersonal: false, isPublic: r.is_public!==false,
         thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
-        members: (allMembers||[]).map(m=>m.user_id), newCount:0, nearestSchedule:null,
+        members: (allMembers||[]).map(m=>({id: m.user_id, role: m.role||'member'})), newCount:0, nearestSchedule:null,
         menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
         settings: {...DEF_SETTINGS,...(r.settings||{})},
         schedules: (schedules||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',color:s.color||'#4A90D9',catId:s.cat_id||'',images:s.images||[],location:s.location||'',locationDetail:s.location_detail||'',createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by,todos:s.todos||[],dday:s.dday||false,repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null})),
@@ -395,6 +396,35 @@ function AppMain({ authUser, onLogout }){
       await sbPost('goroom_schedules', row);
     } catch (e) { console.error('saveSchedule error:', e); }
 
+    return { ...sch, images: imageUrls };
+  };
+
+  const updateScheduleInDb = async (roomId, sch) => {
+    const imageUrls = [];
+    for (let i = 0; i < (sch.images || []).length; i++) {
+      const img = sch.images[i];
+      if (img && img.startsWith('data:')) {
+        const blob = await fileToBlob(img);
+        if (blob) {
+          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.jpg`;
+          const url = await uploadFile(path, blob);
+          if (url) imageUrls.push(url);
+        }
+      } else if (img) {
+        imageUrls.push(img);
+      }
+    }
+    const row = {
+      title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
+      cat_id: sch.catId || null, memo: sch.memo || null,
+      location: sch.location || null, location_detail: sch.locationDetail || null,
+      dday: sch.dday || false, repeat: sch.repeat || null,
+      alarm: sch.alarm || null, budget: sch.budget || null,
+      todos: sch.todos || [], images: imageUrls,
+    };
+    try {
+      await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
+    } catch (e) { console.error('updateSchedule error:', e); }
     return { ...sch, images: imageUrls };
   };
 
@@ -587,7 +617,7 @@ function AppMain({ authUser, onLogout }){
     roomTab, setRoomTab, subPage, setSubPage, searchQ, setSearchQ,
     editProfile, setEditProfile, schDetail, setSchDetail,
     openProfile, openRoom, goBack, pushHistory, updateRoom, getName, toggleFav,
-    saveProfile, saveSchedule, deleteSchedule, saveMemo, deleteMemo, updateMemoPin,
+    saveProfile, saveSchedule, updateScheduleInDb, deleteSchedule, saveMemo, deleteMemo, updateMemoPin,
     saveTodo, deleteTodo, updateTodoDone, saveDiary, deleteDiary,
     updateDiaryLikes, updateDiaryComments, updateRoomInDb, createRoom, deleteRoom,
     addFriendByCode, joinRoom, onLogout,
@@ -628,14 +658,22 @@ function AppMain({ authUser, onLogout }){
   const renderDetail = () => {
     const sb = !isWide;
 
+    /* 스케줄 수정 */
+    if(page==='sch-edit' && schDetail){
+      const s = schDetail;
+      const room = rooms.find(r => r.schedules.some(sc => sc.id === s.id));
+      if(room) return <div className="gr-panel"><ScheduleForm goBack={(savedSch)=>{if(savedSch) setSchDetail(savedSch); navigate(-1);}} room={room} updateRoom={updateRoom} selDate={s.date} sb={sb} saveSchedule={saveSchedule} updateSchedule={updateScheduleInDb} userId={userId} editData={s}/></div>;
+    }
+
     /* 스케줄 상세 */
     if(page==='sch-detail' && schDetail){
       const s = schDetail;
       const room = rooms.find(r => r.schedules.some(sc => sc.id === s.id));
       const st = room?.settings || DEF_SETTINGS;
       const pmName = s.budget?.pmId ? (st.paymentMethods || DEF_SETTINGS.paymentMethods).find(p=>p.id===s.budget.pmId)?.name || '' : '';
+      const detailRole = room?.members.find(m=>m.id===userId)?.role||'member';
       return <div className="gr-panel">
-        <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">스케줄 상세</div><div style={{display:'flex',gap:4}}>{room && <button className="gr-icon-btn" onClick={async ()=>{
+        <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">스케줄 상세</div><div style={{display:'flex',gap:4}}>{room && canEdit(detailRole) && <button className="gr-icon-btn" onClick={()=>{navigate('/schedule-edit');}}><I n="edit" size={18}/></button>}{room && canEdit(detailRole) && <button className="gr-icon-btn" onClick={async ()=>{
           await deleteSchedule(room.id, s.id, s.images, s);
           updateRoom(room.id, r=>({...r,schedules:r.schedules.filter(sc=>sc.id!==s.id)}));
           goBack();

@@ -1,7 +1,7 @@
 import I from '../../../components/shared/Icon';
-import { fmtTime } from '../../../lib/helpers';
+import { fmtTime, canEdit } from '../../../lib/helpers';
 
-export default function RoomTodo({todos,room,updateRoom,isMulti,getName,deleteTodoDb,updateTodoDoneDb,userId}){
+export default function RoomTodo({todos,room,updateRoom,isMulti,getName,deleteTodoDb,updateTodoDoneDb,userId,myRole}){
   const toggle=async (id)=>{
     const t = todos.find(x=>x.id===id);
     if(!t) return;
@@ -15,7 +15,7 @@ export default function RoomTodo({todos,room,updateRoom,isMulti,getName,deleteTo
   };
   if(!todos.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>✅</div>할 일을 추가해보세요</div>;
   return <div style={{padding:12}}>{todos.map(t=> <div key={t.id} className="gr-todo-row">
-    <button className={`gr-todo-cb ${t.done?'done':''}`} onClick={()=>toggle(t.id)}>{t.done&&<I n="check" size={14} color="#fff"/>}</button>
+    <button className={`gr-todo-cb ${t.done?'done':''}`} onClick={()=>canEdit(myRole)&&toggle(t.id)} style={canEdit(myRole)?{}:{opacity:0.5,cursor:'default'}}>{t.done&&<I n="check" size={14} color="#fff"/>}</button>
     <div style={{flex:1,minWidth:0}}>
       <span className={`gr-todo-text ${t.done?'done':''}`}>{t.text}</span>
       <div className="gr-todo-meta">
@@ -26,6 +26,6 @@ export default function RoomTodo({todos,room,updateRoom,isMulti,getName,deleteTo
         </span>}
       </div>
     </div>
-    <button className="gr-todo-del" onClick={()=>del(t.id)}><I n="x" size={14}/></button>
+    {canEdit(myRole)&&<button className="gr-todo-del" onClick={()=>del(t.id)}><I n="x" size={14}/></button>}
   </div>)}</div>;
 }

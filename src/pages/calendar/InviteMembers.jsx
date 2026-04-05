@@ -3,9 +3,9 @@ import I from '../../components/shared/Icon';
 import Avatar from '../../components/shared/Avatar';
 
 export default function InviteMembers({room,updateRoom,friends,sb,goBack,userId}){
-  const available=friends.filter(f=>!room.members.includes(f.id));
+  const available=friends.filter(f=>!room.members.some(m=>m.id===f.id));
   const invite=async (fid)=>{
-    updateRoom(room.id,r=>({...r,members:[...r.members,fid]}));
+    updateRoom(room.id,r=>({...r,members:[...r.members,{id:fid,role:'member'}]}));
     try {
       await sbPost('goroom_room_members', { room_id: room.id, user_id: fid, role: 'member' });
     } catch(e) { console.error(e); }

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import I from '../../../components/shared/Icon';
 import Avatar from '../../../components/shared/Avatar';
 import ImageViewer from '../../../components/shared/ImageViewer';
 import DiarySlider from '../../../components/shared/DiarySlider';
-import { fmtTime, shortId } from '../../../lib/helpers';
+import SchCard from '../../../components/shared/SchCard';
+import { fmtTime, shortId, canEdit } from '../../../lib/helpers';
 
-export default function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick,updateDiaryLikes,updateDiaryComments,userId}){
+export default function RoomDiary({diaries,schedules,isMulti,getName,room,updateRoom,onSchClick,updateDiaryLikes,updateDiaryComments,userId,myRole}){
   const [commentText,setCommentText]=useState('');
   const [viewerImgs,setViewerImgs]=useState(null);
   const [viewerIdx,setViewerIdx]=useState(0);
@@ -42,19 +43,30 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
     else {navigator.clipboard?.writeText(text);alert('복사됨!');}
   };
 
-  if(!diaries.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>📖</div>일기를 작성해보세요</div>;
+  // 스케줄+다이어리 통합 피드 (일시순)
+  const feed = useMemo(()=>{
+    const items = [];
+    (diaries||[]).forEach(d=>items.push({...d,_type:'diary'}));
+    (schedules||[]).forEach(s=>items.push({...s,createdAt:s.createdAt||new Date(s.date+'T00:00:00').getTime(),_type:'schedule'}));
+    return items.sort((a,b)=>b.createdAt-a.createdAt);
+  },[diaries,schedules]);
+
+  if(!feed.length) return <div className="gr-empty"><div style={{fontSize:32,marginBottom:8}}>📖</div>일기를 작성해보세요</div>;
 
   return <div className="gr-thr-feed">
     {viewerImgs&&<ImageViewer images={viewerImgs} startIdx={viewerIdx} onClose={()=>setViewerImgs(null)}/>}
 
-    {diaries.sort((a,b)=>b.createdAt-a.createdAt).map(d=> <div key={d.id} className="gr-thr-post">
+    {feed.map(item=>{
+      if(item._type==='schedule') return <div key={'s-'+item.id} style={{padding:'6px 12px'}}><SchCard sc={item} onClick={()=>onSchClick&&onSchClick(item)}/></div>;
+      const d=item;
+      return <div key={d.id} className="gr-thr-post">
       <div className="gr-thr-post-header">
         <Avatar name={getName(d.createdBy||userId)} size={36}/>
         <div style={{flex:1}}>
           <div className="gr-thr-post-name">{getName(d.createdBy||userId)} <span className="gr-thr-post-time">{d.createdAt?fmtTime(d.createdAt):d.date}</span></div>
           <div className="gr-thr-post-text">{d.mood||''}{d.weather||''} {d.title||''}</div>
         </div>
-        <button className="gr-icon-btn"><I n="more" size={18}/></button>
+        {canEdit(myRole)&&<button className="gr-icon-btn"><I n="more" size={18}/></button>}
       </div>
 
       {d.content&&<div className="gr-thr-post-body">{d.content}</div>}
@@ -92,6 +104,7 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,room,update
           <button className="gr-thr-comment-send" onClick={()=>addComment(d.id)} disabled={!commentText.trim()}>게시</button>
         </div>}
       </div>}
-    </div>)}
+    </div>;
+    })}
   </div>;
 }

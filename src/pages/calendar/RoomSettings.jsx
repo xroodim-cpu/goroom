@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
-import { sbDelete } from '../../supabase';
+import { sbDelete, sbPatch } from '../../supabase';
 import { uploadToWasabi as uploadFile, deleteFromWasabi as deleteFile } from '../../wasabi';
 import I from '../../components/shared/Icon';
 import Avatar from '../../components/shared/Avatar';
 import Toggle from '../../components/shared/Toggle';
-import { shortId, COLORS, ALL_MENUS, DEF_SETTINGS } from '../../lib/helpers';
+import { shortId, COLORS, ALL_MENUS, DEF_SETTINGS, ROLE_LABELS } from '../../lib/helpers';
 
 export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBack,setSubPage,updateRoomInDb,deleteRoom,userId}){
   const [name,setName]=useState(room.name); const [desc,setDesc]=useState(room.desc); const [editing,setEditing]=useState(false);
@@ -88,8 +88,13 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
     await deleteRoom(room.id);
     window.location.reload();
   };
+  const handleRoleChange = async (memberId, newRole) => {
+    if(memberId===userId) return;
+    updateRoom(room.id,r=>({...r,members:r.members.map(m=>m.id===memberId?{...m,role:newRole}:m)}));
+    try { await sbPatch(`/goroom_room_members?room_id=eq.${room.id}&user_id=eq.${memberId}`, {role:newRole}); } catch(e){console.error(e);}
+  };
   const handleRemoveMember = async (memberId) => {
-    updateRoom(room.id,r=>({...r,members:r.members.filter(x=>x!==memberId)}));
+    updateRoom(room.id,r=>({...r,members:r.members.filter(m=>m.id!==memberId)}));
     try {
       await sbDelete(`/goroom_room_members?room_id=eq.${room.id}&user_id=eq.${memberId}`);
     } catch(e) { console.error(e); }
@@ -113,7 +118,7 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
       <div className="gr-set-row"><span className="gr-set-label">공개</span><Toggle on={room.isPublic} toggle={handleTogglePublic}/></div>
 
       <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#fff"/> 초대</button></div>
-      {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!==userId&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
+      {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span><span className="gr-role-badge" data-role={m.role}>{ROLE_LABELS[m.role]||'멤버'}</span>{m.id!==userId&&<><select value={m.role} onChange={e=>handleRoleChange(m.id,e.target.value)} style={{marginLeft:'auto',fontSize:12,padding:'4px 8px',borderRadius:6,border:'1px solid var(--gr-brd)',background:'var(--gr-card)',color:'var(--gr-text)',fontFamily:'var(--gr-ff)'}}><option value="vice-owner">부방장</option><option value="member">멤버</option></select><button className="gr-icon-btn-sm" onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button></>}</div>)}
 
       {!room.isPersonal && <><div className="gr-pg-label" style={{marginTop:20}}><I n="link" size={14}/> 초대 링크</div>
       {room.inviteCode ? (

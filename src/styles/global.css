@@ -94,6 +94,9 @@
 .gr-tsw{width:44px;height:26px;border-radius:13px;border:none;cursor:pointer;position:relative;padding:0}.gr-tsw.off{background:#DDD}.gr-tsw.on{background:var(--gr-acc)}.gr-tsw::after{content:'';position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;top:2px;box-shadow:0 1px 3px rgba(0,0,0,.15)}.gr-tsw.off::after{left:2px}.gr-tsw.on::after{left:20px}
 .gr-set-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--gr-brd)}.gr-set-label{font-size:14px;display:flex;align-items:center;gap:8px}.gr-set-val{font-size:14px;color:var(--gr-t2)}
 .gr-set-member{display:flex;align-items:center;gap:10px;padding:8px 0}
+.gr-role-badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--gr-bg);color:var(--gr-t2)}
+.gr-role-badge[data-role="owner"]{background:#cc222c;color:#fff}
+.gr-role-badge[data-role="vice-owner"]{background:#4A90D9;color:#fff}
 .gr-memo-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .gr-memo-search{flex:1;display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--gr-brd);border-radius:var(--gr-r-sm);background:var(--gr-bg2)}
 .gr-memo-search-input{border:none;outline:none;background:transparent;flex:1;font-size:13px;font-family:var(--gr-ff);color:var(--gr-text)}.gr-memo-search-input::placeholder{color:var(--gr-t3)}

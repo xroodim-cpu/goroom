@@ -37,3 +37,8 @@ export async function fileToBlob(dataUrlOrFile) {
   }
   return null;
 }
+
+// Role helpers
+export const ROLE_LABELS = { owner: '방장', 'vice-owner': '부방장', member: '멤버' };
+export const canEdit = (role) => role === 'owner' || role === 'vice-owner';
+export const canManage = (role) => role === 'owner';

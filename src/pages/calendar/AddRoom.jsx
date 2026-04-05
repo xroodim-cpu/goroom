@@ -21,7 +21,7 @@ export default function AddRoomPage({goBack,setRooms,sb,friends,createRoom,userI
     setSaving(true);
     const roomData = {name:name.trim(),desc:desc.trim(),isPublic,menus,members:[userId,...selMembers],thumbnailFile:thumbFile};
     const roomId = await createRoom(roomData);
-    setRooms(p=>[...p,{id:roomId,name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,thumbnailUrl:thumbPreview||'',members:[userId,...selMembers],newCount:0,nearestSchedule:null,menus,settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]}]);
+    setRooms(p=>[...p,{id:roomId,name:name.trim(),desc:desc.trim(),isPersonal:false,isPublic,thumbnailUrl:thumbPreview||'',members:[{id:userId,role:'owner'},...selMembers.map(id=>({id,role:'member'}))],newCount:0,nearestSchedule:null,menus,settings:{...DEF_SETTINGS},schedules:[],memos:[],todos:[],diaries:[]}]);
     setSaving(false);
     goBack();
   };
