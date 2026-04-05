@@ -69,6 +69,7 @@ function AppMain({ authUser, onLogout }){
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
   const [schDetail, setSchDetail] = useState(null);
+  const [friendSchs, setFriendSchs] = useState({});  // { friendId: schedules[] }
 
   // URL에서 네비게이션 상태 파생
   const path = location.pathname;
@@ -741,18 +742,32 @@ function AppMain({ authUser, onLogout }){
     /* 친구 프로필 */
     if(page==='friend-profile'){
       const f=friends.find(x=>x.id===selectedId); if(!f) return null;
+      // 친구 스케줄 로드 (최초 1회)
+      if(f.isPublic && !friendSchs[f.id]) {
+        (async()=>{
+          try {
+            const roomArr = await sbGet(`/goroom_rooms?select=id&owner_id=eq.${f.id}&is_personal=eq.true`);
+            const room = roomArr?.[0];
+            if(room){
+              const schs = await sbGet(`/goroom_schedules?select=*&room_id=eq.${room.id}`);
+              setFriendSchs(prev=>({...prev,[f.id]:(schs||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',color:s.color||'#4A90D9',images:s.images||[],location:s.location||'',repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by}))}));
+            } else { setFriendSchs(prev=>({...prev,[f.id]:[]})); }
+          } catch(e){ setFriendSchs(prev=>({...prev,[f.id]:[]})); }
+        })();
+      }
+      const fSchs = friendSchs[f.id] || [];
       return <div className="gr-panel">
-        <div className="gr-profile-bg" style={{background:f.profileBg?`url(${f.profileBg}) center/cover`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)'}}>
+        <div className="gr-profile-bg" style={{background:f.profileBg?`url(${f.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff'}}><I n="back" size={20}/></button>}
           <button className="gr-profile-fav-btn" onClick={()=>toggleFav(f.id)}>{f.favorite?<I n="starFill" size={22} color="#cc222c"/>:<I n="star" size={22} color="#fff"/>}</button>
         </div>
         <div className="gr-profile-info">
-          <div className="gr-profile-avatar">{f.profileImg?<img src={f.profileImg} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}} alt=""/>:<Avatar name={f.nickname} size={80}/>}</div>
+          <div className="gr-profile-avatar-wrap">{f.profileImg?<img src={f.profileImg} className="gr-profile-avatar-img" alt=""/>:<Avatar name={f.nickname} size={80}/>}</div>
           <div className="gr-profile-name">{f.nickname}</div>
           <div className="gr-profile-status">{f.statusMsg||'상태메시지 없음'}</div>
           {f.bio&&<div className="gr-profile-bio">{f.bio}</div>}
         </div>
-        {f.isPublic?<MiniCal schedules={[]}/>:<div className="gr-lock"><I n="lock" size={40} color="var(--gr-t3)"/><div style={{fontSize:16,fontWeight:700,color:'var(--gr-t2)'}}>비공개</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>캘린더를 공개하지 않았습니다</div></div>}
+        {f.isPublic?<MiniCal schedules={fSchs} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}}/>:<div className="gr-lock"><I n="lock" size={40} color="var(--gr-t3)"/><div style={{fontSize:16,fontWeight:700,color:'var(--gr-t2)'}}>비공개</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>캘린더를 공개하지 않았습니다</div></div>}
       </div>;
     }
 
