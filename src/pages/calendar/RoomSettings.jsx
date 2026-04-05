@@ -112,7 +112,7 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
       </div>}
       <div className="gr-set-row"><span className="gr-set-label">공개</span><Toggle on={room.isPublic} toggle={handleTogglePublic}/></div>
 
-      <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#191919"/> 초대</button></div>
+      <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#fff"/> 초대</button></div>
       {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span>{m.id!==userId&&<button className="gr-icon-btn-sm" style={{marginLeft:'auto'}} onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button>}</div>)}
 
       {!room.isPersonal && <><div className="gr-pg-label" style={{marginTop:20}}><I n="link" size={14}/> 초대 링크</div>
