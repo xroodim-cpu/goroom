@@ -21,6 +21,7 @@ import AppSettings from './pages/more/AppSettings';
 import TrashPage from './pages/more/Trash';
 import CalRoom from './pages/calendar/CalRoom';
 import AddRoomPage from './pages/calendar/AddRoom';
+import ScheduleForm from './pages/calendar/ScheduleForm';
 
 /* ── Wasabi Storage Helpers ── */
 const uploadFile = uploadToWasabi;
