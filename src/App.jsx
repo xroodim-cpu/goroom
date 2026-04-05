@@ -24,6 +24,7 @@ import TrashPage from './pages/more/Trash';
 import CalRoom from './pages/calendar/CalRoom';
 import AddRoomPage from './pages/calendar/AddRoom';
 import ScheduleForm from './pages/calendar/ScheduleForm';
+import JoinRoomPrompt from './pages/calendar/JoinRoomPrompt';
 
 /* ── Wasabi Storage Helpers ── */
 const uploadFile = uploadToWasabi;
@@ -762,7 +763,8 @@ function AppMain({ authUser, onLogout }){
     if(page==='trash') return <TrashPage goBack={goBack} sb={sb} userId={userId} rooms={rooms} setRooms={setRooms} updateRoom={updateRoom}/>;
 
     if(page==='room'){
-      const room=rooms.find(r=>r.id===selectedId); if(!room) return null;
+      const room=rooms.find(r=>r.id===selectedId);
+      if(!room) return <JoinRoomPrompt roomId={selectedId} userId={userId} joinRoom={joinRoom} goBack={goBack} sb={sb}/>;
       return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} saveDiary={saveDiary} deleteDiary={deleteDiary} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName}/>;
     }
     if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
