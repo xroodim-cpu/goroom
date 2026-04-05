@@ -6,3 +6,19 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { flowType: 'implicit', detectSessionInUrl: true },
 });
+
+/* ── Direct REST API helpers (bypass Supabase JS client auth lock) ── */
+const REST_URL = `${SUPABASE_URL}/rest/v1`;
+const headers = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json', Accept: 'application/json' };
+
+/** GET query — returns array */
+export const sbGet = (path) => fetch(`${REST_URL}${path}`, { headers }).then(r => r.json());
+
+/** POST (insert) — returns inserted rows */
+export const sbPost = (table, body) => fetch(`${REST_URL}/${table}`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(body) }).then(r => r.json());
+
+/** PATCH (update) — path includes filters e.g. /table?id=eq.xxx */
+export const sbPatch = (path, body) => fetch(`${REST_URL}${path}`, { method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(body) }).then(r => r.json());
+
+/** DELETE — path includes filters */
+export const sbDelete = (path) => fetch(`${REST_URL}${path}`, { method: 'DELETE', headers }).then(r => r.ok);
