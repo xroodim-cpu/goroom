@@ -53,3 +53,18 @@ self.addEventListener('push', (e) => {
   const data = e.data?.json() || { title: '구롬', body: '새 알림' };
   e.waitUntil(self.registration.showNotification(data.title, { body: data.body, icon: '/icon-192.png' }));
 });
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || '/';
+  e.waitUntil(
+    clients.matchAll({ type: 'window' }).then(windowClients => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      return clients.openWindow(url);
+    })
+  );
+});

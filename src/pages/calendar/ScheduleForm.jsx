@@ -3,36 +3,37 @@ import I from '../../components/shared/Icon';
 import Toggle from '../../components/shared/Toggle';
 import { uid, shortId, COLORS, DEF_SETTINGS } from '../../lib/helpers';
 
-export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,userId}){
+export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,updateSchedule,userId,editData}){
+  const isEdit = !!editData;
   const st = room.settings || DEF_SETTINGS;
   const menus = room.menus;
   const paymentMethods = st.paymentMethods || DEF_SETTINGS.paymentMethods;
-  const [title,setTitle]=useState('');
-  const [date,setDate]=useState(selDate);
-  const [time,setTime]=useState('');
-  const [memo,setMemo]=useState('');
-  const [location,setLocation]=useState('');
-  const [locationDetail,setLocationDetail]=useState('');
+  const [title,setTitle]=useState(editData?.title||'');
+  const [date,setDate]=useState(editData?.date||selDate);
+  const [time,setTime]=useState(editData?.time||'');
+  const [memo,setMemo]=useState(editData?.memo||'');
+  const [location,setLocation]=useState(editData?.location||'');
+  const [locationDetail,setLocationDetail]=useState(editData?.locationDetail||'');
   const [addrQuery,setAddrQuery]=useState('');
   const [addrResults,setAddrResults]=useState([]);
   const [addrSearching,setAddrSearching]=useState(false);
   const [showAddrSearch,setShowAddrSearch]=useState(false);
-  const [color,setColor]=useState(st.schCats[0]?.color||COLORS[0]);
-  const [catId,setCatId]=useState(st.schCats[0]?.id||'');
-  const [todos,setTodos]=useState([{id:shortId(),text:''}]);
-  const [hasDday,setHasDday]=useState(false);
-  const [hasRepeat,setHasRepeat]=useState(false);
-  const [rpType,setRpType]=useState('daily');
-  const [rpInterval,setRpInterval]=useState('1');
-  const [rpEnd,setRpEnd]=useState('none');
-  const [rpEndDate,setRpEndDate]=useState('');
-  const [alBefore,setAlBefore]=useState('30m');
-  const [alMsg,setAlMsg]=useState('');
-  const [bType,setBType]=useState('expense');
-  const [bAmt,setBAmt]=useState('');
-  const [bCatId,setBCatId]=useState(st.expCats[0]?.id||'');
-  const [bPmId, setBPmId] = useState(paymentMethods[0]?.id||'');
-  const [images,setImages]=useState([]);
+  const [color,setColor]=useState(editData?.color||st.schCats[0]?.color||COLORS[0]);
+  const [catId,setCatId]=useState(editData?.catId||st.schCats[0]?.id||'');
+  const [todos,setTodos]=useState(editData?.todos?.length>0?editData.todos:[{id:shortId(),text:''}]);
+  const [hasDday,setHasDday]=useState(editData?.dday||false);
+  const [hasRepeat,setHasRepeat]=useState(!!editData?.repeat);
+  const [rpType,setRpType]=useState(editData?.repeat?.type||'daily');
+  const [rpInterval,setRpInterval]=useState(String(editData?.repeat?.interval||'1'));
+  const [rpEnd,setRpEnd]=useState(editData?.repeat?.endDate?'date':'none');
+  const [rpEndDate,setRpEndDate]=useState(editData?.repeat?.endDate||'');
+  const [alBefore,setAlBefore]=useState(editData?.alarm?.before||'');
+  const [alMsg,setAlMsg]=useState(editData?.alarm?.message||'');
+  const [bType,setBType]=useState(editData?.budget?.type||'expense');
+  const [bAmt,setBAmt]=useState(editData?.budget?.amount?String(editData.budget.amount):'');
+  const [bCatId,setBCatId]=useState(editData?.budget?.catId||st.expCats[0]?.id||'');
+  const [bPmId, setBPmId] = useState(editData?.budget?.pmId||paymentMethods[0]?.id||'');
+  const [images,setImages]=useState(editData?.images||[]);
   const [saving, setSaving] = useState(false);
   const handleImages=(e)=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setImages(p=>[...p,ev.target.result]);r.readAsDataURL(file);});};
   const removeImage=(idx)=>setImages(p=>p.filter((_,i)=>i!==idx));
@@ -64,21 +65,30 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
     const bCats = bType==='expense' ? st.expCats : st.incCats;
     const bCatItem = bCats.find(c=>c.id===bCatId);
     const sch = {
-      id:uid(), title:title.trim(), date, time, memo, location: location||null, locationDetail: locationDetail||null, color, catId, images, createdAt:Date.now(), createdBy:userId,
-      todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:false})) : [],
+      id: isEdit ? editData.id : uid(),
+      title:title.trim(), date, time, memo, location: location||null, locationDetail: locationDetail||null, color, catId, images,
+      createdAt: isEdit ? editData.createdAt : Date.now(),
+      createdBy: isEdit ? editData.createdBy : userId,
+      todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:t.done||false})) : [],
       dday: hasDday,
       repeat: hasRepeat ? {type:rpType, interval:parseInt(rpInterval)||1, endDate:rpEnd==='date'?rpEndDate:null} : null,
-      alarm: menus.alarm ? {before:alBefore, message:alMsg} : null,
+      alarm: menus.alarm && alBefore ? {before:alBefore, message:alMsg} : null,
       budget: menus.budget && bAmt ? {type:bType, amount:Number(bAmt), catId:bCatId, bCatName:bCatItem?.name||'', pmId:bPmId} : null,
     };
-    const savedSch = await saveSchedule(room.id, sch);
-    updateRoom(room.id, r=>({...r, schedules:[...r.schedules, savedSch]}));
+    let savedSch;
+    if (isEdit && updateSchedule) {
+      savedSch = await updateSchedule(room.id, sch);
+      updateRoom(room.id, r=>({...r, schedules:r.schedules.map(sc=>sc.id===sch.id?savedSch:sc)}));
+    } else {
+      savedSch = await saveSchedule(room.id, sch);
+      updateRoom(room.id, r=>({...r, schedules:[...r.schedules, savedSch]}));
+    }
     setSaving(false);
-    goBack();
+    goBack(isEdit ? savedSch : undefined);
   };
 
   return <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
-    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">새 스케줄</div><div style={{width:28}}/></div>
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">{isEdit?'스케줄 수정':'새 스케줄'}</div><div style={{width:28}}/></div>
     <div className="gr-pg-body">
       <div className="gr-pg-label" style={{marginTop:0}}>카테고리</div>
       <div className="gr-pills-scroll">{st.schCats.map(c=> <button key={c.id} className={`gr-pill-btn ${catId===c.id?'on':''}`} style={catId===c.id?{background:c.color,borderColor:c.color,color:'#fff'}:{}} onClick={()=>selectCat(c.id)}>{c.name}</button>)}</div>
@@ -152,7 +162,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
 
       {menus.alarm && <div className="gr-form-divider">
         <div className="gr-form-sec-title"><I n="bell" size={14} color="#EAB308"/> 알람</div>
-        <div className="gr-pills-scroll">{[['10m','10분 전'],['30m','30분 전'],['1h','1시간 전'],['1d','하루 전']].map(([k,v])=> <button key={k} className={`gr-pill-btn ${alBefore===k?'on':''}`} style={alBefore===k?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setAlBefore(k)}>{v}</button>)}</div>
+        <div className="gr-pills-scroll">{[['','없음'],['10m','10분 전'],['30m','30분 전'],['1h','1시간 전'],['1d','하루 전']].map(([k,v])=> <button key={k} className={`gr-pill-btn ${alBefore===k?'on':''}`} style={alBefore===k?{background:'var(--gr-text)',borderColor:'var(--gr-text)',color:'#fff'}:{}} onClick={()=>setAlBefore(k)}>{v}</button>)}</div>
         <input className="gr-input" value={alMsg} onChange={e=>setAlMsg(e.target.value)} placeholder="알림 메시지 (선택)"/>
       </div>}
 
@@ -184,6 +194,6 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
 
       <div style={{height:20}}/>
     </div>
-    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
+    <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':(isEdit?'수정하기':'저장하기')}</button></div>
   </div>;
 }

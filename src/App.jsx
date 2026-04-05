@@ -7,6 +7,8 @@ import Avatar from './components/shared/Avatar';
 import Toggle from './components/shared/Toggle';
 import MiniCal from './components/shared/MiniCal';
 import useBreakpoint from './hooks/useBreakpoint';
+import useAlarmChecker from './hooks/useAlarmChecker';
+import useRealtimeSchedules from './hooks/useRealtimeSchedules';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -312,6 +314,9 @@ function AppMain({ authUser, onLogout }){
   }, [loading, isWide]);
 
   const updateRoom = useCallback((rid, fn) => setRooms(p => p.map(r => r.id === rid ? fn(r) : r)), []);
+
+  useAlarmChecker(rooms, userId);
+  useRealtimeSchedules(rooms, userId, updateRoom);
 
   const toggleFav = async (fid) => {
     const f = friends.find(x => x.id === fid);
