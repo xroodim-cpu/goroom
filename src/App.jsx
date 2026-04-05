@@ -661,14 +661,19 @@ function AppMain({ authUser, onLogout }){
     /* 스케줄 수정 */
     if(page==='sch-edit' && schDetail){
       const s = schDetail;
-      const room = rooms.find(r => r.schedules.some(sc => sc.id === s.id));
-      if(room) return <div className="gr-panel"><ScheduleForm goBack={(savedSch)=>{if(savedSch) setSchDetail(savedSch); navigate(-1);}} room={room} updateRoom={updateRoom} selDate={s.date} sb={sb} saveSchedule={saveSchedule} updateSchedule={updateScheduleInDb} userId={userId} editData={s}/></div>;
+      const origId = s._origId || s.id;
+      const room = rooms.find(r => r.schedules.some(sc => sc.id === origId));
+      if(room){
+        const editSch = s._recurring ? {...room.schedules.find(sc=>sc.id===origId)} : s;
+        return <div className="gr-panel"><ScheduleForm goBack={(savedSch)=>{if(savedSch) setSchDetail(savedSch); navigate(-1);}} room={room} updateRoom={updateRoom} selDate={editSch.date} sb={sb} saveSchedule={saveSchedule} updateSchedule={updateScheduleInDb} userId={userId} editData={editSch}/></div>;
+      }
     }
 
     /* 스케줄 상세 */
     if(page==='sch-detail' && schDetail){
       const s = schDetail;
-      const room = rooms.find(r => r.schedules.some(sc => sc.id === s.id));
+      const origId = s._origId || s.id;
+      const room = rooms.find(r => r.schedules.some(sc => sc.id === origId));
       const st = room?.settings || DEF_SETTINGS;
       const pmName = s.budget?.pmId ? (st.paymentMethods || DEF_SETTINGS.paymentMethods).find(p=>p.id===s.budget.pmId)?.name || '' : '';
       const detailRole = room?.members.find(m=>m.id===userId)?.role||'member';
