@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import I from './Icon';
 import { isVideo } from '../../lib/helpers';
-import { getDownloadUrl } from '../../wasabi';
 
 export default function ImageViewer({images,startIdx,onClose}){
   const [idx,setIdx]=useState(startIdx||0);
@@ -64,22 +63,39 @@ export default function ImageViewer({images,startIdx,onClose}){
     return m?m[1]:(isVideo(url)?'mp4':'jpg');
   };
 
-  // Presigned URL로 다운로드 (CORS 불필요, 브라우저가 직접 다운로드)
+  // fetch+blob 다운로드 (CORS 허용 시) → fallback: 직접 링크
   const downloadOne=async(url,fileIdx)=>{
     const filename=`goroom_${fileIdx+1}.${getExt(url)}`;
     try {
-      const dlUrl=await getDownloadUrl(url,filename);
+      const res=await fetch(url);
+      if(!res.ok) throw new Error('fetch failed');
+      const blob=await res.blob();
+      const blobUrl=URL.createObjectURL(blob);
       const a=document.createElement('a');
-      a.href=dlUrl;
+      a.href=blobUrl;
       a.download=filename;
       a.style.display='none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(blobUrl),1000);
       return true;
     } catch(err){
-      console.error('download error:',err);
-      return false;
+      // CORS 실패 시 직접 링크 시도
+      try {
+        const a=document.createElement('a');
+        a.href=url;
+        a.download=filename;
+        a.target='_self';
+        a.style.display='none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return true;
+      } catch(e2){
+        console.error('download error:',e2);
+        return false;
+      }
     }
   };
 
