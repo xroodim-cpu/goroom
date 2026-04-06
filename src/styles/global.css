@@ -82,9 +82,10 @@
 .gr-cal-empty{text-align:center;padding:20px;color:var(--gr-t3);font-size:13px}
 .gr-sch-card{display:flex;flex-direction:column;background:var(--gr-bg);border:1px solid var(--gr-brd);border-radius:var(--gr-r);margin-bottom:6px;overflow:hidden}
 .gr-sch-hero{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden}.gr-sch-hero-img{width:100%;height:100%;object-fit:cover;display:block}.gr-sch-hero-count{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px}
-.gr-sch-grid{display:grid;grid-template-columns:1fr;gap:2px}.gr-sch-grid-item{position:relative;overflow:hidden;cursor:pointer}.gr-sch-grid-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}.gr-sch-grid-count{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;pointer-events:none}
-@media(min-width:481px){.gr-sch-grid{grid-template-columns:repeat(2,1fr)}}
-@media(min-width:769px){.gr-sch-grid{grid-template-columns:repeat(3,1fr)}}
+.gr-sch-card .gr-thr-slider{margin:0;cursor:grab;user-select:none}.gr-sch-card .gr-thr-slide{width:100%;max-width:none}.gr-sch-card .gr-thr-slide-img{aspect-ratio:1/1}
+.gr-det-grid{display:grid;grid-template-columns:1fr;gap:4px}.gr-det-grid-item{position:relative;overflow:hidden;cursor:pointer;border-radius:8px}.gr-det-grid-img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+@media(min-width:481px){.gr-det-grid{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:769px){.gr-det-grid{grid-template-columns:repeat(3,1fr)}}
 .gr-sch-card-body{display:flex;gap:10px;padding:12px;align-items:center}
 .gr-sch-bar{width:4px;border-radius:2px;flex-shrink:0;align-self:stretch}.gr-sch-body{flex:1;min-width:0}.gr-sch-title{font-size:14px;font-weight:600}.gr-sch-meta{font-size:12px;color:var(--gr-t3);display:flex;gap:8px;margin-top:2px;flex-wrap:wrap}.gr-sch-budget{font-size:13px;font-weight:700;margin-top:4px}
 .gr-pg-top{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--gr-brd);flex-shrink:0}.gr-pg-title{font-size:17px;font-weight:700}

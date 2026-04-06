@@ -28,6 +28,25 @@ import AddRoomPage from './pages/calendar/AddRoom';
 import ScheduleForm from './pages/calendar/ScheduleForm';
 import JoinRoomPrompt from './pages/calendar/JoinRoomPrompt';
 
+import ImageViewer from './components/shared/ImageViewer';
+import { isVideo } from './lib/helpers';
+
+/* ── 스케줄 상세 이미지 그리드 (반응형: 모바일1열 / 태블릿2열 / PC3열) ── */
+function SchDetailImages({ images }) {
+  const [viewerIdx, setViewerIdx] = useState(null);
+  return <div className="gr-det-section">
+    <div className="gr-det-label">이미지</div>
+    <div className="gr-det-grid">
+      {images.map((img, i) => <div key={i} className="gr-det-grid-item" onClick={() => setViewerIdx(i)}>
+        {isVideo(img)
+          ? <video src={img} className="gr-det-grid-img" muted playsInline />
+          : <img src={img} className="gr-det-grid-img" alt="" />}
+      </div>)}
+    </div>
+    {viewerIdx !== null && <ImageViewer images={images} startIdx={viewerIdx} onClose={() => setViewerIdx(null)} />}
+  </div>;
+}
+
 /* ── Wasabi Storage Helpers ── */
 const uploadFile = uploadToWasabi;
 const deleteFile = deleteFromWasabi;
@@ -765,7 +784,7 @@ function AppMain({ authUser, onLogout }){
           {s.repeat&&<div className="gr-det-section"><div className="gr-det-label">반복</div><div style={{fontSize:14}}>{{daily:'매일',weekly:'매주',monthly:'매월',yearly:'매년',custom:`${s.repeat.interval}일마다`}[s.repeat.type]}{s.repeat.endDate?` ~ ${s.repeat.endDate}`:' (계속)'}</div></div>}
           {s.alarm&&<div className="gr-det-section"><div className="gr-det-label">알람</div><div style={{fontSize:14}}>🔔 {{'10m':'10분 전','30m':'30분 전','1h':'1시간 전','1d':'하루 전'}[s.alarm.before]||s.alarm.before}{s.alarm.message?` — ${s.alarm.message}`:''}</div></div>}
           {s.budget&&<div className="gr-det-section"><div className="gr-det-label">가계부</div><div style={{fontSize:18,fontWeight:700,color:s.budget.type==='income'?'var(--gr-inc)':'var(--gr-exp)'}}>{s.budget.type==='income'?'+':'-'}{s.budget.amount?.toLocaleString()}원</div>{s.budget.bCatName&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:4}}>{s.budget.bCatName}</div>}{pmName&&<div style={{fontSize:12,color:'var(--gr-t3)',marginTop:2}}>결제: {pmName}</div>}</div>}
-          {s.images && s.images.length > 0 && <div className="gr-det-section"><div className="gr-det-label">이미지</div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{s.images.map((img,i)=><img key={i} src={img} alt="" style={{width:80,height:80,objectFit:'cover',borderRadius:8}}/>)}</div></div>}
+          {s.images && s.images.length > 0 && <SchDetailImages images={s.images}/>}
         </div>
       </div>;
     }
