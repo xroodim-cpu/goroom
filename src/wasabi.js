@@ -23,7 +23,10 @@ export async function uploadToWasabi(path, file, onProgress) {
   try {
     const fileSize = file.size || 0;
     if (fileSize > MULTIPART_THRESHOLD) {
-      // 멀티파트 업로드 (대용량 파일: 메모리 효율적 + 진행률 지원)
+      // 멀티파트 업로드 — 파트 단위 진행률
+      const partSize = 5 * 1024 * 1024;
+      const totalParts = Math.ceil(fileSize / partSize);
+      let completedParts = 0;
       const upload = new Upload({
         client: s3,
         params: {
@@ -33,23 +36,36 @@ export async function uploadToWasabi(path, file, onProgress) {
           ContentType: file.type || 'application/octet-stream',
         },
         queueSize: 2,
-        partSize: 5 * 1024 * 1024,
+        partSize,
       });
       upload.on('httpUploadProgress', (p) => {
-        if (onProgress && p.loaded && p.total) {
+        if (!onProgress) return;
+        if (p.loaded && p.total) {
           onProgress(Math.round((p.loaded / p.total) * 100));
+        } else {
+          completedParts++;
+          onProgress(Math.min(Math.round((completedParts / totalParts) * 95), 95));
         }
       });
       await upload.done();
     } else {
-      // 소형 파일: 단일 PutObject
+      // 소형 파일 — SDK + 시뮬레이션 진행률 (S3 SDK는 실시간 progress 미지원)
       const arrayBuffer = await file.arrayBuffer();
-      await s3.send(new PutObjectCommand({
+      if (onProgress) onProgress(10);
+      const sendPromise = s3.send(new PutObjectCommand({
         Bucket: WASABI_BUCKET,
         Key: path,
         Body: new Uint8Array(arrayBuffer),
         ContentType: file.type || 'image/jpeg',
       }));
+      // 시뮬레이션: 10→90 사이를 0.3초 간격으로 올림 (실제 업로드 완료 시 즉시 100%)
+      let simPct = 10;
+      const simInterval = setInterval(() => {
+        simPct = Math.min(simPct + Math.round(Math.random() * 12 + 5), 90);
+        if (onProgress) onProgress(simPct);
+      }, 300);
+      await sendPromise;
+      clearInterval(simInterval);
     }
     if (onProgress) onProgress(100);
     return getWasabiUrl(path);
