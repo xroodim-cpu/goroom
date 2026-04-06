@@ -1,5 +1,5 @@
 :root{--gr-ff:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;--gr-bg:#FFF;--gr-bg2:#F5F5F5;--gr-brd:#EBEBEB;--gr-text:#191919;--gr-t2:#666;--gr-t3:#999;--gr-acc:#cc222c;--gr-acc-d:#a81b24;--gr-acc-text:#fff;--gr-inc:#3182F6;--gr-exp:#F04452;--gr-r:12px;--gr-r-sm:8px;--gr-sidebar-w:360px;--gr-tr:150ms ease}
-*{margin:0;padding:0;box-sizing:border-box}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 .gr-root{overflow:hidden;position:fixed;top:0;left:0;right:0;bottom:0}
 .gr-layout-wide{display:flex;height:100%;font-family:var(--gr-ff);color:var(--gr-text);background:var(--gr-bg)}
 .gr-layout-wide .gr-sidebar{width:var(--gr-sidebar-w);min-width:var(--gr-sidebar-w);border-right:1px solid var(--gr-brd);display:flex;flex-direction:column;height:100%;overflow:hidden}
@@ -163,11 +163,11 @@
 .gr-thr-comment-send{background:none;border:none;color:var(--gr-acc);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--gr-ff)}.gr-thr-comment-send:disabled{color:var(--gr-t3)}
 /* 이미지 뷰어 */
 .gr-img-viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:999;display:flex;align-items:center;justify-content:center}
-.gr-img-viewer-close{position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;z-index:1000;padding:8px}
+.gr-img-viewer-close{position:absolute;top:16px;right:16px;background:none;border:none;cursor:pointer;z-index:1000;padding:8px;outline:none}
 .gr-img-viewer-body{display:flex;flex-direction:column;align-items:center;gap:16px;max-width:90vw;max-height:90vh}
 .gr-img-viewer-img{max-width:90vw;max-height:80vh;object-fit:contain;border-radius:8px}
 .gr-img-viewer-nav{display:flex;align-items:center;gap:20px}
-.gr-img-viewer-btn{background:none;border:none;cursor:pointer;padding:8px;display:flex}
+.gr-img-viewer-btn{background:none;border:none;cursor:pointer;padding:8px;display:flex;outline:none}
 .gr-pill-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--gr-brd);font-size:13px;cursor:pointer;background:var(--gr-bg);color:var(--gr-t2);font-family:var(--gr-ff);transition:all 150ms ease}
 .gr-pill-btn.on{border-color:transparent;color:#fff}
 .gr-todo-input-row{display:flex;gap:6px;align-items:center;margin-bottom:6px}

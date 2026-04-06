@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
       }
     });
 
-    // 3초 안에 auth 이벤트 안 오면 localStorage 기반으로 진행
+    // 1.5초 안에 auth 이벤트 안 오면 localStorage 기반으로 진행
     const authTimeout = setTimeout(() => {
       if (!resolved && mounted) {
         resolved = true;
@@ -73,7 +73,7 @@ export function AuthProvider({ children }) {
         else { setUser(null); }
         setAuthChecked(true);
       }
-    }, 3000);
+    }, 1500);
 
     return () => { mounted = false; clearTimeout(authTimeout); subscription.unsubscribe(); };
   }, []);

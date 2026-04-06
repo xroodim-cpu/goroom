@@ -144,7 +144,7 @@ function AppMain({ authUser, onLogout }){
 
   /* ── Load data via direct REST API (Supabase JS client deadlocks on initial auth) ── */
   useEffect(() => {
-    const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout'); return false; } return prev; }); }, 10000);
+    const loadTimeout = setTimeout(() => { setLoading(prev => { if(prev){ console.warn('Data load timeout'); return false; } return prev; }); }, 5000);
     const SB_URL = 'https://dyotbojxtcqhcmrefofb.supabase.co/rest/v1';
     const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5b3Rib2p4dGNxaGNtcmVmb2ZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU2NTIsImV4cCI6MjA5MDI5MTY1Mn0.dJp5-vqXoW_9s-Br2vyn8sx2fo2wDWpNWlr5tqgddqo';
     const sbGet = (path) => fetch(`${SB_URL}${path}`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, Accept: 'application/json' } }).then(r => r.json());
