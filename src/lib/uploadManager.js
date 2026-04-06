@@ -26,14 +26,13 @@ export function onUploadStateChange(fn) {
  * 백그라운드 업로드 시작
  * @param {string} schId - 스케줄 ID
  * @param {string} roomId - 방 ID
- * @param {Array} dataImages - data URL 이미지 배열 [{index, dataUrl}]
+ * @param {Array} dataImages - [{index, file?, dataUrl?, existingUrl?}]
  * @param {Function} uploadFn - (path, blob) => Promise<url>
- * @param {Function} onAllDone - (schId, imageUrls[]) => void  DB 업데이트 콜백
+ * @param {Function} onAllDone - (schId, imageUrls[]) => void
  * @param {Function} extFn - (dataUrl) => ext
  * @param {Function} blobFn - (dataUrl) => Promise<blob>
  */
 export function startBackgroundUpload(schId, roomId, dataImages, uploadFn, onAllDone, extFn, blobFn) {
-  // 초기 상태 설정
   _state[schId] = {
     images: dataImages.map((d) => ({ index: d.index, status: 'uploading', progress: 0, url: null })),
     done: false,
@@ -41,37 +40,45 @@ export function startBackgroundUpload(schId, roomId, dataImages, uploadFn, onAll
   };
   notify();
 
-  // 각 파일을 순차적으로 업로드 (병렬도 가능하지만 순차가 안정적)
   (async () => {
     const results = [];
     for (let i = 0; i < dataImages.length; i++) {
-      const { index, dataUrl, existingUrl } = dataImages[i];
+      const { index, file, dataUrl, existingUrl } = dataImages[i];
       if (existingUrl) {
-        // 이미 업로드된 URL
         _state[schId].images[i] = { index, status: 'done', progress: 100, url: existingUrl };
         results.push({ index, url: existingUrl });
         notify();
         continue;
       }
 
-      // 업로드 시작 — 시뮬레이션 진행률
       _state[schId].images[i].progress = 10;
       notify();
 
       try {
-        const blob = await blobFn(dataUrl);
-        _state[schId].images[i].progress = 30;
+        // File 객체가 있으면 직접 사용 (메모리 효율적), 없으면 data URL → blob 변환
+        let blob, ext;
+        if (file) {
+          blob = file;
+          const typeMap = {'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'};
+          ext = typeMap[file.type] || file.type.split('/')[1] || 'jpg';
+        } else if (dataUrl) {
+          blob = await blobFn(dataUrl);
+          ext = extFn(dataUrl);
+        }
+
+        _state[schId].images[i].progress = 20;
         notify();
 
         if (blob) {
-          const ext = extFn(dataUrl);
           const path = `calendar/${roomId}/sch/${schId}/${index}_${Date.now()}.${ext}`;
 
-          _state[schId].images[i].progress = 50;
-          notify();
-
-          const url = await uploadFn(path, blob);
-
+          // 실제 업로드 진행률 콜백
+          const onProgress = (pct) => {
+            // 20~95% 범위에 매핑 (20% = 준비완료, 95% = 업로드완료 직전)
+            _state[schId].images[i].progress = 20 + Math.round(pct * 0.75);
+            notify();
+          };
+          const url = await uploadFn(path, blob, onProgress);
           if (url) {
             _state[schId].images[i] = { index, status: 'done', progress: 100, url };
             results.push({ index, url });
@@ -91,16 +98,13 @@ export function startBackgroundUpload(schId, roomId, dataImages, uploadFn, onAll
       notify();
     }
 
-    // 모든 업로드 완료
     const finalUrls = results.filter(r => r.url).map(r => r.url);
     _state[schId].done = true;
     _state[schId].finalUrls = finalUrls;
     notify();
 
-    // DB 업데이트 콜백
     if (onAllDone) onAllDone(schId, finalUrls);
 
-    // 5초 후 상태 정리
     setTimeout(() => {
       delete _state[schId];
       notify();

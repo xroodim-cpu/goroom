@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
-import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl } from './lib/helpers';
+import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl, extFromFile, isVideo as isVideoHelper } from './lib/helpers';
 import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
 import I from './components/shared/Icon';
 import Avatar from './components/shared/Avatar';
@@ -415,21 +415,26 @@ function AppMain({ authUser, onLogout }){
 
   /* ── Room CRUD helpers (Supabase-backed) ── */
   const saveSchedule = async (roomId, sch) => {
-    // 이미 업로드된 URL과 새로 업로드할 data URL 분리
+    const fileMap = sch._fileMap || {};
+    // blob URL(새 파일)과 기존 URL 분리
     const pendingImages = [];
     const immediateUrls = [];
     for (let i = 0; i < (sch.images || []).length; i++) {
       const img = sch.images[i];
-      if (img && img.startsWith('data:')) {
+      if (img && img.startsWith('blob:') && fileMap[img]) {
+        // 새 파일 (File 객체 직접 사용)
+        pendingImages.push({ index: i, file: fileMap[img] });
+        immediateUrls.push(null);
+      } else if (img && img.startsWith('data:')) {
+        // 레거시 data URL 지원
         pendingImages.push({ index: i, dataUrl: img });
-        immediateUrls.push(null); // placeholder
+        immediateUrls.push(null);
       } else if (img) {
         pendingImages.push({ index: i, existingUrl: img });
         immediateUrls.push(img);
       }
     }
 
-    // DB에 즉시 저장 (이미지는 기존 URL만, 새 이미지는 빈 배열로)
     const existingOnly = immediateUrls.filter(u => u);
     const row = {
       id: sch.id, room_id: roomId, created_by: userId,
@@ -444,12 +449,10 @@ function AppMain({ authUser, onLogout }){
       await sbPost('goroom_schedules', row);
     } catch (e) { console.error('saveSchedule error:', e); }
 
-    const hasDataUrls = pendingImages.some(p => p.dataUrl);
-    if (hasDataUrls) {
-      // 백그라운드 업로드 시작
+    const hasNewFiles = pendingImages.some(p => p.file || p.dataUrl);
+    if (hasNewFiles) {
       startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
         (schId, finalUrls) => {
-          // 업로드 완료 → DB 업데이트 + room state 업데이트
           sbPatch(`/goroom_schedules?id=eq.${schId}`, { images: finalUrls }).catch(e => console.error('bg update error:', e));
           setRooms(prev => prev.map(r => r.id === roomId ? { ...r, schedules: (r.schedules || []).map(s => s.id === schId ? { ...s, images: finalUrls } : s) } : r));
         },
@@ -457,29 +460,29 @@ function AppMain({ authUser, onLogout }){
       );
     }
 
-    // data URL이 있는 이미지는 로컬에서 바로 보이도록 data URL 유지
-    return { ...sch, images: sch.images || [] };
+    return { ...sch, images: sch.images || [], _fileMap: undefined };
   };
 
   const updateScheduleInDb = async (roomId, sch) => {
-    // 기존 업로드 진행 중인지 확인
+    const fileMap = sch._fileMap || {};
     const activeUpload = getUploadState(sch.id);
     const isUploading = activeUpload && !activeUpload.done;
 
     const pendingImages = [];
     const immediateUrls = [];
-    const newDataUrls = []; // 이번 수정에서 새로 추가된 data URL만
+    const hasNewFiles = [];
     for (let i = 0; i < (sch.images || []).length; i++) {
       const img = sch.images[i];
-      if (img && img.startsWith('data:')) {
-        // 기존 업로드 중인 이미지인지, 새로 추가한 이미지인지 구분
-        if (isUploading) {
-          // 업로드 진행 중 → data URL은 기존 업로드가 처리하므로 무시
-          continue;
-        }
+      if (img && img.startsWith('blob:') && fileMap[img]) {
+        if (isUploading) continue;
+        pendingImages.push({ index: i, file: fileMap[img] });
+        immediateUrls.push(null);
+        hasNewFiles.push(img);
+      } else if (img && img.startsWith('data:')) {
+        if (isUploading) continue;
         pendingImages.push({ index: i, dataUrl: img });
         immediateUrls.push(null);
-        newDataUrls.push(img);
+        hasNewFiles.push(img);
       } else if (img) {
         pendingImages.push({ index: i, existingUrl: img });
         immediateUrls.push(img);
@@ -495,7 +498,6 @@ function AppMain({ authUser, onLogout }){
       alarm: sch.alarm || null, budget: sch.budget || null,
       todos: sch.todos || [],
     };
-    // 업로드 진행 중이면 images 필드를 건드리지 않음 (백그라운드 업로드가 완료 후 처리)
     if (!isUploading) {
       row.images = existingOnly;
     }
@@ -503,8 +505,7 @@ function AppMain({ authUser, onLogout }){
       await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
     } catch (e) { console.error('updateSchedule error:', e); }
 
-    const hasNewDataUrls = newDataUrls.length > 0;
-    if (hasNewDataUrls && !isUploading) {
+    if (hasNewFiles.length > 0 && !isUploading) {
       startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
         (schId, finalUrls) => {
           sbPatch(`/goroom_schedules?id=eq.${schId}`, { images: finalUrls }).catch(e => console.error('bg update error:', e));
@@ -514,7 +515,7 @@ function AppMain({ authUser, onLogout }){
       );
     }
 
-    return { ...sch, images: sch.images || [] };
+    return { ...sch, images: sch.images || [], _fileMap: undefined };
   };
 
   const deleteSchedule = async (roomId, schId, images, scheduleData) => {

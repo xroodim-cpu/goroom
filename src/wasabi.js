@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 
 const WASABI_REGION = 'ap-northeast-2';
 const WASABI_ENDPOINT = 'https://s3.ap-northeast-2.wasabisys.com';
@@ -16,16 +17,40 @@ const s3 = new S3Client({
 
 const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}`;
 
-/** 파일 업로드 → public URL 반환 */
+/** 파일 업로드 → public URL 반환 (5MB 이상은 멀티파트 업로드 + 진행률) */
+const MULTIPART_THRESHOLD = 5 * 1024 * 1024; // 5MB
 export async function uploadToWasabi(path, file, onProgress) {
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    await s3.send(new PutObjectCommand({
-      Bucket: WASABI_BUCKET,
-      Key: path,
-      Body: new Uint8Array(arrayBuffer),
-      ContentType: file.type || 'image/jpeg',
-    }));
+    const fileSize = file.size || 0;
+    if (fileSize > MULTIPART_THRESHOLD) {
+      // 멀티파트 업로드 (대용량 파일: 메모리 효율적 + 진행률 지원)
+      const upload = new Upload({
+        client: s3,
+        params: {
+          Bucket: WASABI_BUCKET,
+          Key: path,
+          Body: file,
+          ContentType: file.type || 'application/octet-stream',
+        },
+        queueSize: 2,
+        partSize: 5 * 1024 * 1024,
+      });
+      upload.on('httpUploadProgress', (p) => {
+        if (onProgress && p.loaded && p.total) {
+          onProgress(Math.round((p.loaded / p.total) * 100));
+        }
+      });
+      await upload.done();
+    } else {
+      // 소형 파일: 단일 PutObject
+      const arrayBuffer = await file.arrayBuffer();
+      await s3.send(new PutObjectCommand({
+        Bucket: WASABI_BUCKET,
+        Key: path,
+        Body: new Uint8Array(arrayBuffer),
+        ContentType: file.type || 'image/jpeg',
+      }));
+    }
     if (onProgress) onProgress(100);
     return getWasabiUrl(path);
   } catch (e) { console.error('uploadToWasabi error:', e); return null; }

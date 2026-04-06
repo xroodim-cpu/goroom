@@ -53,9 +53,22 @@ export function extFromDataUrl(dataUrl) {
 }
 
 /** URL 또는 data URL이 비디오인지 판별 */
+// blob: URL 중 비디오인 것을 추적하는 Set
+const _videoBlobUrls = new Set();
+export function markBlobAsVideo(blobUrl) { _videoBlobUrls.add(blobUrl); }
+export function unmarkBlobUrl(blobUrl) { _videoBlobUrls.delete(blobUrl); }
+
 export function isVideo(url) {
   if (!url) return false;
+  if (_videoBlobUrls.has(url)) return true;
   return /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url) || (typeof url === 'string' && url.startsWith('data:video/'));
+}
+
+/** File 객체에서 확장자 추출 */
+export function extFromFile(file) {
+  if (!file || !file.type) return 'jpg';
+  const map = {'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'};
+  return map[file.type] || file.type.split('/')[1] || 'jpg';
 }
 
 /** 바이트 용량을 읽기 좋은 문자열로 포맷 */

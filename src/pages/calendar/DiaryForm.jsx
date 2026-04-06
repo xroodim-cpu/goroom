@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import I from '../../components/shared/Icon';
-import { uid, fmt } from '../../lib/helpers';
+import { uid, fmt, markBlobAsVideo, unmarkBlobUrl, isVideo } from '../../lib/helpers';
 
 const MOODS=['😊','😢','😡','😴','🥰','😎','🤔','😱','🤗','😤'];
 const WEATHERS=['☀️','⛅','🌧️','❄️','🌪️','🌈','🌙','⚡'];
@@ -12,19 +12,34 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}
   const [mood,setMood]=useState('');
   const [weather,setWeather]=useState('');
   const [saving,setSaving]=useState(false);
+  const MAX_FILE_MB = 100;
+  const fileMapRef = useRef({});
   const handleImages=(e)=>{
-    const files=Array.from(e.target.files);
-    files.forEach(file=>{
-      const reader=new FileReader();
-      reader.onload=(ev)=>setImages(prev=>[...prev,ev.target.result]);
-      reader.readAsDataURL(file);
+    Array.from(e.target.files).forEach(file=>{
+      if(file.size > MAX_FILE_MB * 1024 * 1024) {
+        alert(`파일 크기가 ${MAX_FILE_MB}MB를 초과합니다: ${file.name}`);
+        return;
+      }
+      const blobUrl = URL.createObjectURL(file);
+      fileMapRef.current[blobUrl] = file;
+      if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);
+      setImages(prev=>[...prev, blobUrl]);
     });
+    e.target.value = '';
   };
-  const removeImage=(idx)=>setImages(prev=>prev.filter((_,i)=>i!==idx));
+  const removeImage=(idx)=>setImages(prev=>{
+    const url = prev[idx];
+    if(url && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+      unmarkBlobUrl(url);
+      delete fileMapRef.current[url];
+    }
+    return prev.filter((_,i)=>i!==idx);
+  });
   const save=async ()=>{
     if(!title.trim()||saving) return;
     setSaving(true);
-    const diary = {id:uid(),title:title.trim(),content,images,mood,weather,date:fmt(new Date()),createdAt:Date.now(),createdBy:userId,likes:[],comments:[]};
+    const diary = {id:uid(),title:title.trim(),content,images,mood,weather,date:fmt(new Date()),createdAt:Date.now(),createdBy:userId,likes:[],comments:[],_fileMap:fileMapRef.current};
     const savedDiary = await saveDiaryDb(room.id, diary);
     updateRoom(room.id,r=>({...r,diaries:[...r.diaries,savedDiary]}));
     setSaving(false);
@@ -39,14 +54,14 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}
       <div className="gr-emoji-row">{WEATHERS.map(e=> <button key={e} className={`gr-emoji-btn ${weather===e?'on':''}`} onClick={()=>setWeather(weather===e?'':e)}>{e}</button>)}</div>
       <div className="gr-pg-label">사진</div>
       <div className="gr-diary-upload-area">
-        {images.map((img,i)=> <div key={i} className="gr-diary-upload-thumb">
-          <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>
+        {images.map((img,i)=> <div key={i} className="gr-diary-upload-thumb" style={{position:'relative'}}>
+          {isVideo(img)?<video src={img} muted style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>:<img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>}
           <button className="gr-diary-upload-remove" onClick={()=>removeImage(i)}><I n="x" size={12} color="#fff"/></button>
         </div>)}
         <label className="gr-diary-upload-add">
           <I n="plus" size={24} color="var(--gr-t3)"/>
           <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>추가</span>
-          <input type="file" accept="image/*" multiple onChange={handleImages} style={{display:'none'}}/>
+          <input type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
         </label>
       </div>
       <div className="gr-pg-label">제목</div>

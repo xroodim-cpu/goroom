@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import I from '../../components/shared/Icon';
 import Toggle from '../../components/shared/Toggle';
-import { uid, shortId, COLORS, DEF_SETTINGS, isVideo } from '../../lib/helpers';
+import { uid, shortId, COLORS, DEF_SETTINGS, isVideo, markBlobAsVideo, unmarkBlobUrl } from '../../lib/helpers';
 
 export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,updateSchedule,userId,editData}){
   const isEdit = !!editData;
@@ -37,8 +37,31 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [images,setImages]=useState(editData?.images||[]);
   const [mood,setMood]=useState(editData?.mood||'');
   const [saving, setSaving] = useState(false);
-  const handleImages=(e)=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setImages(p=>[...p,ev.target.result]);r.readAsDataURL(file);});};
-  const removeImage=(idx)=>setImages(p=>p.filter((_,i)=>i!==idx));
+  // File 객체를 blob URL에 매핑 (메모리 효율: readAsDataURL 대신 createObjectURL 사용)
+  const MAX_FILE_MB = 100;
+  const fileMapRef = useRef({});
+  const handleImages=(e)=>{
+    Array.from(e.target.files).forEach(file=>{
+      if(file.size > MAX_FILE_MB * 1024 * 1024) {
+        alert(`파일 크기가 ${MAX_FILE_MB}MB를 초과합니다: ${file.name}`);
+        return;
+      }
+      const blobUrl = URL.createObjectURL(file);
+      fileMapRef.current[blobUrl] = file;
+      if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);
+      setImages(p=>[...p, blobUrl]);
+    });
+    e.target.value = '';
+  };
+  const removeImage=(idx)=>setImages(p=>{
+    const url = p[idx];
+    if(url && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+      unmarkBlobUrl(url);
+      delete fileMapRef.current[url];
+    }
+    return p.filter((_,i)=>i!==idx);
+  });
 
   const selectCat = (id) => { setCatId(id); const c=st.schCats.find(x=>x.id===id); if(c) setColor(c.color); };
 
@@ -68,7 +91,7 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
     const bCatItem = bCats.find(c=>c.id===bCatId);
     const sch = {
       id: isEdit ? editData.id : uid(),
-      title:title.trim(), date, time, memo, mood, location: location||null, locationDetail: locationDetail||null, color, catId, images,
+      title:title.trim(), date, time, memo, mood, location: location||null, locationDetail: locationDetail||null, color, catId, images, _fileMap: fileMapRef.current,
       createdAt: isEdit ? editData.createdAt : Date.now(),
       createdBy: isEdit ? editData.createdBy : userId,
       todos: menus.todo ? todos.filter(t=>t.text.trim()).map(t=>({id:t.id,text:t.text.trim(),done:t.done||false})) : [],
