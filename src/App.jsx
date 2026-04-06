@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
-import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage } from './lib/helpers';
+import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl } from './lib/helpers';
 import I from './components/shared/Icon';
 import Avatar from './components/shared/Avatar';
 import Toggle from './components/shared/Toggle';
@@ -21,6 +21,7 @@ import AddFriendPage from './pages/more/AddFriend';
 import NotificationSettings from './pages/more/NotificationSettings';
 import AppSettings from './pages/more/AppSettings';
 import TrashPage from './pages/more/Trash';
+import StoragePage from './pages/more/StoragePage';
 import CalRoom from './pages/calendar/CalRoom';
 import AddRoomPage from './pages/calendar/AddRoom';
 import ScheduleForm from './pages/calendar/ScheduleForm';
@@ -110,6 +111,7 @@ function AppMain({ authUser, onLogout }){
     if (path === '/more/notifications') return { page: 'notification-settings' };
     if (path === '/more/settings') return { page: 'app-settings' };
     if (path === '/more/trash') return { page: 'trash' };
+    if (path === '/more/storage') return { page: 'storage' };
     if (path === '/schedule-detail') return { page: 'sch-detail' };
     if (path === '/schedule-edit') return { page: 'sch-edit' };
     return { page: null, selectedId: null };
@@ -399,7 +401,8 @@ function AppMain({ authUser, onLogout }){
       if (img && img.startsWith('data:')) {
         const blob = await fileToBlob(img);
         if (blob) {
-          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.jpg`;
+          const ext = extFromDataUrl(img);
+          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.${ext}`;
           const url = await uploadFile(path, blob);
           if (url) imageUrls.push(url);
         }
@@ -431,7 +434,8 @@ function AppMain({ authUser, onLogout }){
       if (img && img.startsWith('data:')) {
         const blob = await fileToBlob(img);
         if (blob) {
-          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.jpg`;
+          const ext = extFromDataUrl(img);
+          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.${ext}`;
           const url = await uploadFile(path, blob);
           if (url) imageUrls.push(url);
         }
@@ -521,7 +525,8 @@ function AppMain({ authUser, onLogout }){
       if (img && img.startsWith('data:')) {
         const blob = await fileToBlob(img);
         if (blob) {
-          const path = `calendar/${roomId}/diary/${diary.id}/${i}_${Date.now()}.jpg`;
+          const ext = extFromDataUrl(img);
+          const path = `calendar/${roomId}/diary/${diary.id}/${i}_${Date.now()}.${ext}`;
           const url = await uploadFile(path, blob);
           if (url) imageUrls.push(url);
         }
@@ -810,6 +815,7 @@ function AppMain({ authUser, onLogout }){
     if(page==='notification-settings') return <NotificationSettings goBack={goBack} sb={sb}/>;
     if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId} onLogout={onLogout}/>;
     if(page==='trash') return <TrashPage goBack={goBack} sb={sb} userId={userId} rooms={rooms} setRooms={setRooms} updateRoom={updateRoom}/>;
+    if(page==='storage') return <StoragePage goBack={goBack} rooms={rooms} userId={userId}/>;
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId);
@@ -850,6 +856,7 @@ function AppMain({ authUser, onLogout }){
         <div className="gr-more-item" onClick={()=>{navigate('/more/add-friend');}}><I n="link" size={20}/><span>친구 추가 코드</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/notifications');}}><I n="bell" size={20}/><span>알림 설정</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/settings');}}><I n="gear" size={20}/><span>설정</span></div>
+        <div className="gr-more-item" onClick={()=>{navigate('/more/storage');}}><I n="folder" size={20}/><span>용량</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/trash');}}><I n="trash" size={20}/><span>휴지통</span></div>
       </div></>}
       <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{if(isWide)navigate('/profile');else navigate('/');}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{if(isWide){const myRoom=rooms.find(r=>r.isPersonal);navigate(myRoom?`/calendar/${myRoom.id}/cal`:'/calendar');}else navigate('/calendar');}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{if(isWide)navigate('/more/info');else navigate('/more');}}><I n="more" size={22}/><span>더보기</span></button></div>

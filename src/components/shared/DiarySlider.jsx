@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { isVideo } from '../../lib/helpers';
+import I from './Icon';
 
 export default function DiarySlider({images,onImgClick,square,full}){
   const ref=useRef(null);
@@ -24,8 +26,9 @@ export default function DiarySlider({images,onImgClick,square,full}){
   return <div className={cls} ref={ref}
     onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
     onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
-    {images.map((img,i)=> <div key={i} className={`gr-thr-slide${square?' gr-thr-slide-sq':''}`} onClick={e=>{e.stopPropagation();if(!drag.current.moved) onImgClick(i);}}>
-      <img src={img} className="gr-thr-slide-img" alt="" draggable={false}/>
+    {images.map((img,i)=> <div key={i} className={`gr-thr-slide${square?' gr-thr-slide-sq':''}`} style={{position:'relative'}} onClick={e=>{e.stopPropagation();if(!drag.current.moved) onImgClick(i);}}>
+      {isVideo(img)?<video src={img} className="gr-thr-slide-img" muted playsInline draggable={false}/>:<img src={img} className="gr-thr-slide-img" alt="" draggable={false}/>}
+      {isVideo(img)&&<div className="gr-video-badge"><I n="play" size={16} color="#fff"/></div>}
     </div>)}
     {images.length>1&&<div className="gr-thr-slide-count">{images.length} 장</div>}
   </div>;

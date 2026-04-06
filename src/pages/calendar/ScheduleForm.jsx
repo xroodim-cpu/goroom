@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import I from '../../components/shared/Icon';
 import Toggle from '../../components/shared/Toggle';
-import { uid, shortId, COLORS, DEF_SETTINGS } from '../../lib/helpers';
+import { uid, shortId, COLORS, DEF_SETTINGS, isVideo } from '../../lib/helpers';
 
 export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,updateSchedule,userId,editData}){
   const isEdit = !!editData;
@@ -182,16 +182,17 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
       </div>}
 
       <div className="gr-form-divider">
-        <div className="gr-form-sec-title"><I n="image" size={14} color="var(--gr-t2)"/> 이미지 첨부</div>
+        <div className="gr-form-sec-title"><I n="image" size={14} color="var(--gr-t2)"/> 파일 첨부</div>
         <div className="gr-diary-upload-area">
-          {images.map((img,i)=> <div key={i} className="gr-diary-upload-thumb">
-            <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>
+          {images.map((img,i)=> <div key={i} className="gr-diary-upload-thumb" style={{position:'relative'}}>
+            {isVideo(img)?<video src={img} muted style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>:<img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>}
+            {isVideo(img)&&<div className="gr-video-badge"><I n="play" size={14} color="#fff"/></div>}
             <button className="gr-diary-upload-remove" onClick={()=>removeImage(i)}><I n="x" size={12} color="#fff"/></button>
           </div>)}
           <label className="gr-diary-upload-add">
             <I n="plus" size={24} color="var(--gr-t3)"/>
             <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>추가</span>
-            <input type="file" accept="image/*" multiple onChange={handleImages} style={{display:'none'}}/>
+            <input type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
           </label>
         </div>
       </div>

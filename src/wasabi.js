@@ -83,4 +83,22 @@ export function extractWasabiPath(url) {
   return null;
 }
 
+/** prefix별 총 용량(bytes) + 파일수 조회 */
+export async function listFolderSize(folder) {
+  try {
+    let totalSize = 0, fileCount = 0, continuationToken;
+    do {
+      const params = { Bucket: WASABI_BUCKET, Prefix: folder };
+      if (continuationToken) params.ContinuationToken = continuationToken;
+      const list = await s3.send(new ListObjectsV2Command(params));
+      for (const obj of (list.Contents || [])) {
+        totalSize += obj.Size || 0;
+        fileCount++;
+      }
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : null;
+    } while (continuationToken);
+    return { size: totalSize, fileCount };
+  } catch (e) { console.error('listFolderSize error:', e); return { size: 0, fileCount: 0 }; }
+}
+
 export { BASE_URL, WASABI_BUCKET };

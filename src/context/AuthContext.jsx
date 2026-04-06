@@ -25,11 +25,11 @@ export function AuthProvider({ children }) {
     // onAuthStateChange만 사용 — getSession() 동시 호출 시 내부 lock 경합으로 deadlock 발생
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
-      // OAuth 콜백 URL 정리 (세션 감지 후)
-      if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
       if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
+        // OAuth 콜백 URL 정리 (세션 복원 성공 후에만)
+        if (window.location.hash.includes('access_token') || window.location.search.includes('error')) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
         setUserFromSession(session);
         if (!resolved) { resolved = true; setAuthChecked(true); }
         // goroom_users 자동 생성 (SIGNED_IN만)

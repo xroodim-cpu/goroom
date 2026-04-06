@@ -42,3 +42,26 @@ export async function fileToBlob(dataUrlOrFile) {
 export const ROLE_LABELS = { owner: '방장', 'vice-owner': '부방장', member: '멤버' };
 export const canEdit = (role) => role === 'owner' || role === 'vice-owner';
 export const canManage = (role) => role === 'owner';
+
+/** data URL에서 확장자 추출 */
+export function extFromDataUrl(dataUrl) {
+  const m = dataUrl.match(/^data:([^;]+)/);
+  if (!m) return 'jpg';
+  const mime = m[1];
+  const map = {'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','video/mp4':'mp4','video/quicktime':'mov','video/webm':'webm'};
+  return map[mime] || mime.split('/')[1] || 'jpg';
+}
+
+/** URL 또는 data URL이 비디오인지 판별 */
+export function isVideo(url) {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url) || (typeof url === 'string' && url.startsWith('data:video/'));
+}
+
+/** 바이트 용량을 읽기 좋은 문자열로 포맷 */
+export function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
