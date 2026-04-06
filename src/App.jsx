@@ -462,13 +462,24 @@ function AppMain({ authUser, onLogout }){
   };
 
   const updateScheduleInDb = async (roomId, sch) => {
+    // 기존 업로드 진행 중인지 확인
+    const activeUpload = getUploadState(sch.id);
+    const isUploading = activeUpload && !activeUpload.done;
+
     const pendingImages = [];
     const immediateUrls = [];
+    const newDataUrls = []; // 이번 수정에서 새로 추가된 data URL만
     for (let i = 0; i < (sch.images || []).length; i++) {
       const img = sch.images[i];
       if (img && img.startsWith('data:')) {
+        // 기존 업로드 중인 이미지인지, 새로 추가한 이미지인지 구분
+        if (isUploading) {
+          // 업로드 진행 중 → data URL은 기존 업로드가 처리하므로 무시
+          continue;
+        }
         pendingImages.push({ index: i, dataUrl: img });
         immediateUrls.push(null);
+        newDataUrls.push(img);
       } else if (img) {
         pendingImages.push({ index: i, existingUrl: img });
         immediateUrls.push(img);
@@ -482,14 +493,18 @@ function AppMain({ authUser, onLogout }){
       location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
-      todos: sch.todos || [], images: existingOnly,
+      todos: sch.todos || [],
     };
+    // 업로드 진행 중이면 images 필드를 건드리지 않음 (백그라운드 업로드가 완료 후 처리)
+    if (!isUploading) {
+      row.images = existingOnly;
+    }
     try {
       await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
     } catch (e) { console.error('updateSchedule error:', e); }
 
-    const hasDataUrls = pendingImages.some(p => p.dataUrl);
-    if (hasDataUrls) {
+    const hasNewDataUrls = newDataUrls.length > 0;
+    if (hasNewDataUrls && !isUploading) {
       startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
         (schId, finalUrls) => {
           sbPatch(`/goroom_schedules?id=eq.${schId}`, { images: finalUrls }).catch(e => console.error('bg update error:', e));
