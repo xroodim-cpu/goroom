@@ -753,6 +753,7 @@ function AppMain({ authUser, onLogout }){
         await saveProfile(me);
       };
       return <div className="gr-panel">
+        <div style={{flex:1,overflowY:'auto'}}>
         <div className="gr-profile-bg" style={{background:me.profileBg?`url(${me.profileBg}) center/cover`:'linear-gradient(135deg,#cc222c 0%,#a81b24 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff',zIndex:3}}><I n="back" size={20}/></button>}
           <div className="gr-profile-top-bar">
@@ -775,6 +776,7 @@ function AppMain({ authUser, onLogout }){
         </div>
         <div style={{padding:'0 20px'}}><div className="gr-divider-line" style={{margin:'12px 0'}}/><div style={{fontSize:13,fontWeight:600,color:'var(--gr-t2)',marginBottom:8}}>내 캘린더</div></div>
         <MiniCal schedules={myRoom?.schedules||[]} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}}/>
+        </div>
       </div>;
     }
 
@@ -796,6 +798,7 @@ function AppMain({ authUser, onLogout }){
       }
       const fSchs = friendSchs[f.id] || [];
       return <div className="gr-panel">
+        <div style={{flex:1,overflowY:'auto'}}>
         <div className="gr-profile-bg" style={{background:f.profileBg?`url(${f.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)'}}>
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff'}}><I n="back" size={20}/></button>}
           <button className="gr-profile-fav-btn" onClick={()=>toggleFav(f.id)}>{f.favorite?<I n="starFill" size={22} color="#cc222c"/>:<I n="star" size={22} color="#fff"/>}</button>
@@ -807,6 +810,7 @@ function AppMain({ authUser, onLogout }){
           {f.bio&&<div className="gr-profile-bio">{f.bio}</div>}
         </div>
         {f.isPublic?<MiniCal schedules={fSchs} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}}/>:<div className="gr-lock"><I n="lock" size={40} color="var(--gr-t3)"/><div style={{fontSize:16,fontWeight:700,color:'var(--gr-t2)'}}>비공개</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>캘린더를 공개하지 않았습니다</div></div>}
+        </div>
       </div>;
     }
 
@@ -869,7 +873,7 @@ function AppMain({ authUser, onLogout }){
     const isFriend = friends.some(f => f.id === p.id);
     return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setProfilePopup(null)}>
       <div style={{width:'90%',maxWidth:320,borderRadius:20,overflow:'hidden',background:'var(--gr-bg)'}} onClick={e=>e.stopPropagation()}>
-        <div style={{height:120,background:p.profileBg?`url(${p.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)',position:'relative'}}>
+        <div style={{width:'100%',aspectRatio:'16/9',background:p.profileBg?`url(${p.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <button className="gr-icon-btn" onClick={()=>setProfilePopup(null)} style={{position:'absolute',top:8,right:8,color:'#fff'}}><I n="x" size={18}/></button>
         </div>
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'0 20px 20px',marginTop:-40}}>

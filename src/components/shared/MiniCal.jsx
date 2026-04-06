@@ -46,7 +46,7 @@ export default function MiniCal({schedules,onSchClick}){
   const getSchs=ds=>visibleSchs.filter(s=>s.date===ds).slice(0,4);
   const selSchs=visibleSchs.filter(s=>s.date===ss);
 
-  return <div style={{flex:1,overflowY:'auto'}}>
+  return <div>
     <div className="gr-cal-nav"><button className="gr-cal-nav-btn" onClick={()=>mv(-1)}><I n="left" size={18}/></button><h3>{y}년 {MO[m]}</h3><button className="gr-cal-nav-btn" onClick={()=>mv(1)}><I n="right" size={18}/></button></div>
     <div className="gr-cal-head">{DAYS.map(d=><span key={d}>{d}</span>)}</div>
     <div className="gr-cal-grid">{cells.map((c,i)=>{const ds=fmt(c.dt),dd=getSchs(ds); return <div key={i} className={`gr-cal-cell ${c.o?'ot':''} ${ds===ts?'tod':''} ${ds===ss&&ds!==ts?'sel':''}`} onClick={()=>setSel(c.dt)}><span className="gr-cal-d">{c.d}</span><div className="gr-cal-events">{dd.map((sc,j)=>sc.time
