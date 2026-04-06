@@ -38,14 +38,9 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [mood,setMood]=useState(editData?.mood||'');
   const [saving, setSaving] = useState(false);
   // File 객체를 blob URL에 매핑 (메모리 효율: readAsDataURL 대신 createObjectURL 사용)
-  const MAX_FILE_MB = 100;
   const fileMapRef = useRef({});
   const handleImages=(e)=>{
     Array.from(e.target.files).forEach(file=>{
-      if(file.size > MAX_FILE_MB * 1024 * 1024) {
-        alert(`파일 크기가 ${MAX_FILE_MB}MB를 초과합니다: ${file.name}`);
-        return;
-      }
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
       if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);

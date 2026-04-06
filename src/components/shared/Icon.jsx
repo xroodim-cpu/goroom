@@ -42,6 +42,7 @@ const I = ({n, size=20, color}) => {
     database:<svg style={s} viewBox="0 0 24 24" {...p}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>,
     volumeOn:<svg style={s} viewBox="0 0 24 24" {...p}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill={color||'currentColor'}/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>,
     volumeOff:<svg style={s} viewBox="0 0 24 24" {...p}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill={color||'currentColor'}/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>,
+    download:<svg style={s} viewBox="0 0 24 24" {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
   };
   return icons[n] || null;
 };

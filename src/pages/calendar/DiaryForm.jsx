@@ -12,14 +12,9 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}
   const [mood,setMood]=useState('');
   const [weather,setWeather]=useState('');
   const [saving,setSaving]=useState(false);
-  const MAX_FILE_MB = 100;
   const fileMapRef = useRef({});
   const handleImages=(e)=>{
     Array.from(e.target.files).forEach(file=>{
-      if(file.size > MAX_FILE_MB * 1024 * 1024) {
-        alert(`파일 크기가 ${MAX_FILE_MB}MB를 초과합니다: ${file.name}`);
-        return;
-      }
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
       if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);

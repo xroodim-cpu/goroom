@@ -5,6 +5,7 @@ import { isVideo } from '../../lib/helpers';
 export default function ImageViewer({images,startIdx,onClose}){
   const [idx,setIdx]=useState(startIdx||0);
   const [muted,setMuted]=useState(true);
+  const [downloading,setDownloading]=useState(false);
   const vidRef=useRef(null);
   const touchRef=useRef({startX:0,startY:0,moved:false});
 
@@ -45,9 +46,32 @@ export default function ImageViewer({images,startIdx,onClose}){
     touchRef.current.moved=false;
   };
 
+  const handleDownload=async(e)=>{
+    e.stopPropagation();
+    const url=images[idx];
+    if(!url||downloading) return;
+    setDownloading(true);
+    try {
+      const res=await fetch(url);
+      const blob=await res.blob();
+      const ext=isVideo(url)?'mp4':'jpg';
+      const match=url.match(/\.(\w+)(\?|$)/);
+      const fileExt=match?match[1]:ext;
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=`goroom_${idx+1}.${fileExt}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch(err){ console.error('download error:',err); }
+    setDownloading(false);
+  };
+
   return <div className="gr-img-viewer" onClick={handleBgClick}
     onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
     <button className="gr-img-viewer-close" onClick={(e)=>{e.stopPropagation();onClose();}}><I n="x" size={24} color="#fff"/></button>
+    <button className="gr-img-viewer-download" onClick={handleDownload} disabled={downloading}><I n="download" size={22} color="#fff"/></button>
     <div className="gr-img-viewer-body" onClick={e=>e.stopPropagation()}>
       <div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
         {isVideo(images[idx])
