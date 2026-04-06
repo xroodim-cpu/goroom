@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 
 const WASABI_REGION = 'ap-northeast-2';
@@ -16,6 +16,26 @@ const s3 = new S3Client({
 });
 
 const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}`;
+
+// Wasabi CORS 설정 (앱 시작 시 1회 실행)
+let _corsSet = false;
+export async function ensureWasabiCors() {
+  if (_corsSet) return;
+  try {
+    await s3.send(new PutBucketCorsCommand({
+      Bucket: WASABI_BUCKET,
+      CORSConfiguration: {
+        CORSRules: [{
+          AllowedOrigins: ['*'],
+          AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+          AllowedHeaders: ['*'],
+          MaxAgeSeconds: 3600,
+        }],
+      },
+    }));
+    _corsSet = true;
+  } catch (e) { console.warn('CORS setup skipped:', e.message); _corsSet = true; }
+}
 
 /** 파일 업로드 → public URL 반환 (5MB 이상은 멀티파트 업로드 + 진행률) */
 const MULTIPART_THRESHOLD = 5 * 1024 * 1024; // 5MB

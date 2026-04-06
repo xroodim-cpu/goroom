@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
-import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
+import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath, ensureWasabiCors } from './wasabi';
 import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl, extFromFile, isVideo as isVideoHelper } from './lib/helpers';
 import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
 import I from './components/shared/Icon';
@@ -160,6 +160,9 @@ function AppMain({ authUser, onLogout }){
     if (selectedId && subPageMap[sp]) navigate(`/calendar/${selectedId}/${subPageMap[sp]}`);
   };
   const pushHistory = () => {}; // React Router handles history
+
+  /* ── Wasabi CORS 설정 (앱 시작 시 1회) ── */
+  useEffect(() => { ensureWasabiCors(); }, []);
 
   /* ── Load data via direct REST API (Supabase JS client deadlocks on initial auth) ── */
   useEffect(() => {
