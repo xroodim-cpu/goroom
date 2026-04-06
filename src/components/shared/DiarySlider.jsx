@@ -87,18 +87,20 @@ export default function DiarySlider({images, onImgClick, square, full, schId}){
     return item.progress;
   };
 
-  return <div className={cls} ref={ref}
-    onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-    onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
-    {images.map((img, i) => {
-      const progress = getProgress(i);
-      return <div key={i} className={`gr-thr-slide${square?' gr-thr-slide-sq':''}`} style={{position:'relative'}} onClick={e => {e.stopPropagation(); if (!drag.current.moved) onImgClick(i);}}>
-        {isVideo(img)
-          ? <VideoSlide src={img} className="gr-thr-slide-img" />
-          : <img src={img} className="gr-thr-slide-img" alt="" draggable={false} />}
-        {progress !== null && <UploadProgress progress={progress} />}
-      </div>;
-    })}
+  return <div className="gr-thr-slider-wrap">
+    <div className={cls} ref={ref}
+      onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+      onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
+      {images.map((img, i) => {
+        const progress = getProgress(i);
+        return <div key={i} className={`gr-thr-slide${square?' gr-thr-slide-sq':''}`} style={{position:'relative'}} onClick={e => {e.stopPropagation(); if (!drag.current.moved) onImgClick(i);}}>
+          {isVideo(img)
+            ? <VideoSlide src={img} className="gr-thr-slide-img" />
+            : <img src={img} className="gr-thr-slide-img" alt="" draggable={false} />}
+          {progress !== null && <UploadProgress progress={progress} />}
+        </div>;
+      })}
+    </div>
     {images.length > 1 && <div className="gr-thr-slide-count">{images.length} 장</div>}
   </div>;
 }

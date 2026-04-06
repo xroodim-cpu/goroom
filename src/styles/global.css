@@ -141,6 +141,7 @@
 .gr-thr-sch-time{font-size:12px;color:var(--gr-t3);font-weight:400}
 .gr-thr-sch-loc{font-size:12px;color:var(--gr-t3);display:flex;align-items:center;gap:4px;margin-top:2px}
 .gr-thr-sch-budget{font-size:14px;font-weight:700;margin-top:4px}
+.gr-thr-slider-wrap{position:relative}
 .gr-thr-slider{display:flex;gap:6px;overflow-x:auto;margin:10px 0 6px 52px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;cursor:grab;user-select:none}.gr-thr-slider::-webkit-scrollbar{height:0}
 .gr-thr-slider-full{margin-left:0;margin-right:0}
 .gr-thr-slider-sq .gr-thr-slide-img{aspect-ratio:1/1}
