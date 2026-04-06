@@ -119,7 +119,7 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,getProfile,
         </div>
 
         {/* Images slider - full width */}
-        {imgs.length>0&&<DiarySlider images={imgs} full onImgClick={(i)=>{setViewerImgs(imgs);setViewerIdx(i);}}/>}
+        {imgs.length>0&&<DiarySlider images={imgs} full schId={item.id} onImgClick={(i)=>{setViewerImgs(imgs);setViewerIdx(i);}}/>}
 
         {/* Actions: like, share, (schedule: detail link) */}
         <div className="gr-thr-post-actions">

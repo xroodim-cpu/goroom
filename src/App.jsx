@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
 import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl } from './lib/helpers';
+import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
 import I from './components/shared/Icon';
 import Avatar from './components/shared/Avatar';
 import Toggle from './components/shared/Toggle';
@@ -395,22 +396,22 @@ function AppMain({ authUser, onLogout }){
 
   /* ── Room CRUD helpers (Supabase-backed) ── */
   const saveSchedule = async (roomId, sch) => {
-    const imageUrls = [];
+    // 이미 업로드된 URL과 새로 업로드할 data URL 분리
+    const pendingImages = [];
+    const immediateUrls = [];
     for (let i = 0; i < (sch.images || []).length; i++) {
       const img = sch.images[i];
       if (img && img.startsWith('data:')) {
-        const blob = await fileToBlob(img);
-        if (blob) {
-          const ext = extFromDataUrl(img);
-          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.${ext}`;
-          const url = await uploadFile(path, blob);
-          if (url) imageUrls.push(url);
-        }
+        pendingImages.push({ index: i, dataUrl: img });
+        immediateUrls.push(null); // placeholder
       } else if (img) {
-        imageUrls.push(img);
+        pendingImages.push({ index: i, existingUrl: img });
+        immediateUrls.push(img);
       }
     }
 
+    // DB에 즉시 저장 (이미지는 기존 URL만, 새 이미지는 빈 배열로)
+    const existingOnly = immediateUrls.filter(u => u);
     const row = {
       id: sch.id, room_id: roomId, created_by: userId,
       title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
@@ -418,43 +419,68 @@ function AppMain({ authUser, onLogout }){
       location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
-      todos: sch.todos || [], images: imageUrls,
+      todos: sch.todos || [], images: existingOnly,
     };
     try {
       await sbPost('goroom_schedules', row);
     } catch (e) { console.error('saveSchedule error:', e); }
 
-    return { ...sch, images: imageUrls };
+    const hasDataUrls = pendingImages.some(p => p.dataUrl);
+    if (hasDataUrls) {
+      // 백그라운드 업로드 시작
+      startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
+        (schId, finalUrls) => {
+          // 업로드 완료 → DB 업데이트 + room state 업데이트
+          sbPatch(`/goroom_schedules?id=eq.${schId}`, { images: finalUrls }).catch(e => console.error('bg update error:', e));
+          setRooms(prev => prev.map(r => r.id === roomId ? { ...r, schedules: (r.schedules || []).map(s => s.id === schId ? { ...s, images: finalUrls } : s) } : r));
+        },
+        extFromDataUrl, fileToBlob
+      );
+    }
+
+    // data URL이 있는 이미지는 로컬에서 바로 보이도록 data URL 유지
+    return { ...sch, images: sch.images || [] };
   };
 
   const updateScheduleInDb = async (roomId, sch) => {
-    const imageUrls = [];
+    const pendingImages = [];
+    const immediateUrls = [];
     for (let i = 0; i < (sch.images || []).length; i++) {
       const img = sch.images[i];
       if (img && img.startsWith('data:')) {
-        const blob = await fileToBlob(img);
-        if (blob) {
-          const ext = extFromDataUrl(img);
-          const path = `calendar/${roomId}/sch/${sch.id}/${i}_${Date.now()}.${ext}`;
-          const url = await uploadFile(path, blob);
-          if (url) imageUrls.push(url);
-        }
+        pendingImages.push({ index: i, dataUrl: img });
+        immediateUrls.push(null);
       } else if (img) {
-        imageUrls.push(img);
+        pendingImages.push({ index: i, existingUrl: img });
+        immediateUrls.push(img);
       }
     }
+
+    const existingOnly = immediateUrls.filter(u => u);
     const row = {
       title: sch.title, color: sch.color, date: sch.date, time: sch.time || null,
       cat_id: sch.catId || null, memo: sch.memo || null, mood: sch.mood || null,
       location: sch.location || null, location_detail: sch.locationDetail || null,
       dday: sch.dday || false, repeat: sch.repeat || null,
       alarm: sch.alarm || null, budget: sch.budget || null,
-      todos: sch.todos || [], images: imageUrls,
+      todos: sch.todos || [], images: existingOnly,
     };
     try {
       await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
     } catch (e) { console.error('updateSchedule error:', e); }
-    return { ...sch, images: imageUrls };
+
+    const hasDataUrls = pendingImages.some(p => p.dataUrl);
+    if (hasDataUrls) {
+      startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
+        (schId, finalUrls) => {
+          sbPatch(`/goroom_schedules?id=eq.${schId}`, { images: finalUrls }).catch(e => console.error('bg update error:', e));
+          setRooms(prev => prev.map(r => r.id === roomId ? { ...r, schedules: (r.schedules || []).map(s => s.id === schId ? { ...s, images: finalUrls } : s) } : r));
+        },
+        extFromDataUrl, fileToBlob
+      );
+    }
+
+    return { ...sch, images: sch.images || [] };
   };
 
   const deleteSchedule = async (roomId, schId, images, scheduleData) => {

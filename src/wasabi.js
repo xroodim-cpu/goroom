@@ -17,7 +17,7 @@ const s3 = new S3Client({
 const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}`;
 
 /** 파일 업로드 → public URL 반환 */
-export async function uploadToWasabi(path, file) {
+export async function uploadToWasabi(path, file, onProgress) {
   try {
     const arrayBuffer = await file.arrayBuffer();
     await s3.send(new PutObjectCommand({
@@ -26,9 +26,11 @@ export async function uploadToWasabi(path, file) {
       Body: new Uint8Array(arrayBuffer),
       ContentType: file.type || 'image/jpeg',
     }));
+    if (onProgress) onProgress(100);
     return getWasabiUrl(path);
   } catch (e) { console.error('uploadToWasabi error:', e); return null; }
 }
+
 
 /** 단일 파일 삭제 */
 export async function deleteFromWasabi(path) {

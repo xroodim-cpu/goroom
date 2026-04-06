@@ -248,6 +248,9 @@
 .gr-video-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;background:rgba(0,0,0,.5);border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .gr-video-sound-btn{position:absolute;bottom:10px;right:10px;width:32px;height:32px;background:rgba(0,0,0,.55);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;padding:0}
 .gr-video-sound-btn-viewer{bottom:16px;right:16px;width:40px;height:40px}
+.gr-upload-progress{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;z-index:3;pointer-events:none}
+.gr-upload-progress svg{filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))}
+.gr-upload-progress-txt{position:absolute;color:#fff;font-size:11px;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.5)}
 /* Storage page */
 .gr-storage-total{background:var(--gr-bg2);border-radius:var(--gr-r);padding:16px;margin-bottom:16px}
 .gr-storage-total-head{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--gr-t2);margin-bottom:8px}
