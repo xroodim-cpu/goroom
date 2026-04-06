@@ -1,5 +1,6 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, PutBucketCorsCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand, ListObjectsV2Command, DeleteObjectsCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const WASABI_REGION = 'ap-northeast-2';
 const WASABI_ENDPOINT = 'https://s3.ap-northeast-2.wasabisys.com';
@@ -17,24 +18,18 @@ const s3 = new S3Client({
 
 const BASE_URL = `${WASABI_ENDPOINT}/${WASABI_BUCKET}`;
 
-// Wasabi CORS 설정 (앱 시작 시 1회 실행)
-let _corsSet = false;
-export async function ensureWasabiCors() {
-  if (_corsSet) return;
+/** 다운로드용 Presigned URL 생성 (Content-Disposition: attachment → 브라우저가 바로 다운로드) */
+export async function getDownloadUrl(fileUrl, filename) {
   try {
-    await s3.send(new PutBucketCorsCommand({
+    const path = extractWasabiPath(fileUrl);
+    if (!path) return fileUrl;
+    const command = new GetObjectCommand({
       Bucket: WASABI_BUCKET,
-      CORSConfiguration: {
-        CORSRules: [{
-          AllowedOrigins: ['*'],
-          AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
-          AllowedHeaders: ['*'],
-          MaxAgeSeconds: 3600,
-        }],
-      },
-    }));
-    _corsSet = true;
-  } catch (e) { console.warn('CORS setup skipped:', e.message); _corsSet = true; }
+      Key: path,
+      ResponseContentDisposition: `attachment; filename="${filename}"`,
+    });
+    return await getSignedUrl(s3, command, { expiresIn: 300 });
+  } catch (e) { console.error('getDownloadUrl error:', e); return fileUrl; }
 }
 
 /** 파일 업로드 → public URL 반환 (5MB 이상은 멀티파트 업로드 + 진행률) */
