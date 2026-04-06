@@ -1,6 +1,37 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { isVideo } from '../../lib/helpers';
 import I from './Icon';
+
+function VideoSlide({ src, className, square }) {
+  const vidRef = useRef(null);
+  const [muted, setMuted] = useState(true);
+
+  useEffect(() => {
+    const vid = vidRef.current;
+    if (!vid) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { vid.play().catch(() => {}); }
+      else { vid.pause(); setMuted(true); vid.muted = true; }
+    }, { threshold: 0.5 });
+    obs.observe(vid);
+    return () => obs.disconnect();
+  }, []);
+
+  const toggleMute = (e) => {
+    e.stopPropagation();
+    const vid = vidRef.current;
+    if (!vid) return;
+    vid.muted = !vid.muted;
+    setMuted(vid.muted);
+  };
+
+  return <>
+    <video ref={vidRef} src={src} className={className} muted playsInline loop draggable={false} />
+    <button className="gr-video-sound-btn" onClick={toggleMute}>
+      <I n={muted ? 'volumeOff' : 'volumeOn'} size={16} color="#fff" />
+    </button>
+  </>;
+}
 
 export default function DiarySlider({images,onImgClick,square,full}){
   const ref=useRef(null);
@@ -27,8 +58,9 @@ export default function DiarySlider({images,onImgClick,square,full}){
     onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
     onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
     {images.map((img,i)=> <div key={i} className={`gr-thr-slide${square?' gr-thr-slide-sq':''}`} style={{position:'relative'}} onClick={e=>{e.stopPropagation();if(!drag.current.moved) onImgClick(i);}}>
-      {isVideo(img)?<video src={img} className="gr-thr-slide-img" muted playsInline draggable={false}/>:<img src={img} className="gr-thr-slide-img" alt="" draggable={false}/>}
-      {isVideo(img)&&<div className="gr-video-badge"><I n="play" size={16} color="#fff"/></div>}
+      {isVideo(img)
+        ? <VideoSlide src={img} className="gr-thr-slide-img" />
+        : <img src={img} className="gr-thr-slide-img" alt="" draggable={false}/>}
     </div>)}
     {images.length>1&&<div className="gr-thr-slide-count">{images.length} 장</div>}
   </div>;

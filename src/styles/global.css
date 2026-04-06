@@ -246,6 +246,8 @@
 .gr-pin-key{width:100%;aspect-ratio:1.4;border:none;border-radius:var(--gr-r);font-size:22px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);background:var(--gr-bg2);color:var(--gr-text);transition:all .1s}.gr-pin-key:active{background:var(--gr-brd);transform:scale(.95)}.gr-pin-key.empty{background:transparent;cursor:default}
 /* Video badge */
 .gr-video-badge{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:32px;height:32px;background:rgba(0,0,0,.5);border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.gr-video-sound-btn{position:absolute;bottom:10px;right:10px;width:32px;height:32px;background:rgba(0,0,0,.55);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;padding:0}
+.gr-video-sound-btn-viewer{bottom:16px;right:16px;width:40px;height:40px}
 /* Storage page */
 .gr-storage-total{background:var(--gr-bg2);border-radius:var(--gr-r);padding:16px;margin-bottom:16px}
 .gr-storage-total-head{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--gr-t2);margin-bottom:8px}
