@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import I from '../../components/shared/Icon';
-import StorageLimitModal from '../../components/shared/StorageLimitModal';
 import { listFolderSize } from '../../wasabi';
 import { fmtSize } from '../../lib/helpers';
 
@@ -12,16 +11,24 @@ const PLAN_LABELS = {
   [100 * 1024 * 1024 * 1024]: '100 GB',
 };
 
+const PLANS = [
+  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3300, label: '3,300' },
+  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 6600, label: '6,600', popular: true },
+  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 11000, label: '11,000' },
+];
+
 export default function StoragePage({ goBack, rooms, userId, me }) {
   const ownerRooms = rooms.filter(r => r.members.find(m => m.id === userId && m.role === 'owner'));
   const [storageData, setStorageData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalSize, setTotalSize] = useState(0);
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState('plan_50g');
+  const [processing, setProcessing] = useState(false);
 
   const storageLimit = me?.storageLimit || FREE_LIMIT;
   const planLabel = PLAN_LABELS[storageLimit] || fmtSize(storageLimit);
   const isPaid = storageLimit > FREE_LIMIT;
+  const isOver = totalSize >= storageLimit;
 
   useEffect(() => {
     (async () => {
@@ -42,6 +49,44 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
 
   const pct = Math.min((totalSize / storageLimit) * 100, 100);
 
+  const handlePayment = async () => {
+    const plan = PLANS.find(p => p.id === selectedPlan);
+    if (!plan || processing) return;
+    setProcessing(true);
+    try {
+      if (!window.TossPayments) {
+        const script = document.createElement('script');
+        script.src = 'https://js.tosspayments.com/v2/standard';
+        script.onload = () => initPayment(plan);
+        document.head.appendChild(script);
+      } else {
+        await initPayment(plan);
+      }
+    } catch (e) {
+      console.error('Payment error:', e);
+      alert('결제 초기화에 실패했습니다. 다시 시도해주세요.');
+      setProcessing(false);
+    }
+  };
+
+  const initPayment = async (plan) => {
+    try {
+      const tossPayments = TossPayments('live_ck_kZLKGPx4M3MYMxPPy6eVBaWypv1o');
+      const payment = tossPayments.payment({ customerKey: userId });
+      await payment.requestBillingAuth('CARD', {
+        amount: { currency: 'KRW', value: plan.price },
+        orderId: `storage_${userId}_${Date.now()}`,
+        orderName: `구롬 용량 추가 ${plan.name}/월`,
+        customerEmail: '',
+        successUrl: `${window.location.origin}/payment/success?plan=${plan.id}&userId=${userId}`,
+        failUrl: `${window.location.origin}/payment/fail`,
+      });
+    } catch (e) {
+      console.error('TossPayments error:', e);
+      setProcessing(false);
+    }
+  };
+
   return (
     <div className="gr-panel">
       <div className="gr-pg-top">
@@ -57,16 +102,17 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
             {/* 총 사용량 */}
             <div className="gr-storage-total">
               <div className="gr-storage-total-head">
-                <I n="database" size={18} color="var(--gr-acc)"/>
+                <I n="database" size={18} color={isOver ? '#F04452' : 'var(--gr-acc)'}/>
                 <span>총 사용량</span>
               </div>
               <div className="gr-storage-total-size">
-                {fmtSize(totalSize)} <span className="gr-storage-total-limit">/ {planLabel}</span>
+                <span style={{ color: isOver ? '#F04452' : undefined }}>{fmtSize(totalSize)}</span>
+                {' '}<span className="gr-storage-total-limit">/ {planLabel}</span>
               </div>
               <div className="gr-storage-bar">
                 <div className="gr-storage-fill" style={{ width: `${pct}%`, background: pct >= 90 ? '#F04452' : 'var(--gr-acc)' }}/>
               </div>
-              <div className="gr-storage-pct">{pct.toFixed(1)}% 사용</div>
+              <div className="gr-storage-pct" style={{ color: isOver ? '#F04452' : undefined }}>{pct.toFixed(1)}% 사용</div>
             </div>
 
             {/* 요금제 정보 */}
@@ -78,13 +124,42 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
               </div>
               <div className="gr-storage-info-row">
                 <span>사용 가능</span>
-                <span>{fmtSize(Math.max(0, storageLimit - totalSize))} 남음</span>
+                <span style={{ color: isOver ? '#F04452' : undefined, fontWeight: isOver ? 600 : 400 }}>
+                  {isOver ? '용량 초과' : `${fmtSize(Math.max(0, storageLimit - totalSize))} 남음`}
+                </span>
               </div>
+
+              {/* 무료 사용자: 인라인 요금제 선택 */}
               {!isPaid && (
-                <button className="gr-storage-pay-btn" style={{marginTop:12,width:'100%'}} onClick={()=>setShowUpgrade(true)}>
-                  용량 업그레이드
-                </button>
+                <div style={{marginTop:16}}>
+                  <div style={{display:'flex',gap:8,marginBottom:12}}>
+                    {PLANS.map(plan => (
+                      <div
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(plan.id)}
+                        style={{
+                          flex:1, border: selectedPlan===plan.id ? '2px solid var(--gr-acc)' : '2px solid var(--gr-brd)',
+                          borderRadius:12, padding:'12px 4px', textAlign:'center', cursor:'pointer',
+                          background: selectedPlan===plan.id ? 'rgba(204,34,44,.04)' : 'var(--gr-bg)',
+                          position:'relative', transition:'all .2s',
+                        }}
+                      >
+                        {plan.popular && <div style={{position:'absolute',top:-9,left:'50%',transform:'translateX(-50%)',background:'#F59E0B',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 8px',borderRadius:8,whiteSpace:'nowrap'}}>추천</div>}
+                        <div style={{fontSize:14,fontWeight:700,color:'var(--gr-text)',marginBottom:4}}>{plan.name}</div>
+                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center',gap:1}}>
+                          <span style={{fontSize:15,fontWeight:700,color:'var(--gr-acc)'}}>{plan.label}</span>
+                          <span style={{fontSize:10,color:'var(--gr-t3)'}}>원/월</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="gr-storage-pay-btn" style={{width:'100%'}} onClick={handlePayment} disabled={processing}>
+                    {processing ? '결제 준비 중...' : '구독하기'}
+                  </button>
+                  <div style={{textAlign:'center',fontSize:11,color:'var(--gr-t3)',marginTop:6}}>정기결제는 매월 자동 갱신되며, 언제든 해지 가능</div>
+                </div>
               )}
+
               {isPaid && (
                 <div className="gr-storage-info-row" style={{marginTop:8}}>
                   <span style={{fontSize:11,color:'var(--gr-t3)'}}>정기결제 중 · 해지는 설정에서 가능</span>
@@ -115,7 +190,6 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
           </>
         )}
       </div>
-      {showUpgrade && <StorageLimitModal onClose={()=>setShowUpgrade(false)} usedSize={totalSize} storageLimit={storageLimit} userId={userId}/>}
     </div>
   );
 }
