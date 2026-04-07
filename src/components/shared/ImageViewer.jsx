@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import I from './Icon';
 import { isVideo } from '../../lib/helpers';
+import { getDownloadUrl } from '../../wasabi';
 
 export default function ImageViewer({images,startIdx,onClose}){
   const [idx,setIdx]=useState(startIdx||0);
@@ -63,37 +64,33 @@ export default function ImageViewer({images,startIdx,onClose}){
     return m?m[1]:(isVideo(url)?'mp4':'jpg');
   };
 
-  // fetch+blob 다운로드 (CORS 허용 시) → fallback: 직접 링크
+  // Presigned URL로 다운로드 (Content-Disposition: attachment)
   const downloadOne=async(url,fileIdx)=>{
-    const filename=`goroom_${fileIdx+1}.${getExt(url)}`;
+    const filename='goroom_'+(fileIdx+1)+'.'+getExt(url);
     try {
-      const res=await fetch(url);
+      // Wasabi presigned URL 생성 (attachment 헤더 포함)
+      var dlUrl = await getDownloadUrl(url, filename);
+      // presigned URL을 fetch+blob으로 다운로드
+      var res = await fetch(dlUrl);
       if(!res.ok) throw new Error('fetch failed');
-      const blob=await res.blob();
-      const blobUrl=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=blobUrl;
-      a.download=filename;
-      a.style.display='none';
+      var blob = await res.blob();
+      var blobUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      a.style.display = 'none';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(()=>URL.revokeObjectURL(blobUrl),1000);
+      setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 1000);
       return true;
-    } catch(err){
-      // CORS 실패 시 직접 링크 시도
+    } catch(err) {
+      console.error('download error:', err);
+      // 최종 fallback: presigned URL을 새 탭이 아닌 현재 탭에서 열기
       try {
-        const a=document.createElement('a');
-        a.href=url;
-        a.download=filename;
-        a.target='_self';
-        a.style.display='none';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        window.location.href = dlUrl || url;
         return true;
-      } catch(e2){
-        console.error('download error:',e2);
+      } catch(e2) {
         return false;
       }
     }
@@ -106,7 +103,7 @@ export default function ImageViewer({images,startIdx,onClose}){
     if(downloading) return;
     setDownloading(true);
     showToast('파일을 다운로드합니다...');
-    const ok=await downloadOne(images[idx],idx);
+    var ok = await downloadOne(images[idx],idx);
     setDownloading(false);
     showToast(ok?'저장 완료!':'다운로드에 실패했습니다');
   };
@@ -117,14 +114,14 @@ export default function ImageViewer({images,startIdx,onClose}){
     setShowDlMenu(false);
     if(downloading) return;
     setDownloading(true);
-    showToast(`${images.length}개 파일을 다운로드합니다...`);
-    let ok=0;
-    for(let i=0;i<images.length;i++){
+    showToast(images.length+'개 파일을 다운로드합니다...');
+    var ok=0;
+    for(var i=0;i<images.length;i++){
       if(await downloadOne(images[i],i)) ok++;
-      if(i<images.length-1) await new Promise(r=>setTimeout(r,500));
+      if(i<images.length-1) await new Promise(function(r){setTimeout(r,500);});
     }
     setDownloading(false);
-    showToast(ok>0?`${ok}개 파일 저장 완료!`:'다운로드에 실패했습니다');
+    showToast(ok>0?ok+'개 파일 저장 완료!':'다운로드에 실패했습니다');
   };
 
   return <div className="gr-img-viewer" onClick={handleBgClick}

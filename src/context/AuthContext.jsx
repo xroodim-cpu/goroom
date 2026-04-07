@@ -3,6 +3,11 @@ import { supabase, sbGet, sbPost } from '../supabase';
 
 const AuthContext = createContext(null);
 
+// localStorage 안전 접근 (카카오톡 WebView 등 제한 환경 대응)
+function safeSetItem(k, v) { try { localStorage.setItem(k, v); } catch(e) { /* ignore */ } }
+function safeGetItem(k) { try { return localStorage.getItem(k); } catch(e) { return null; } }
+function safeRemoveItem(k) { try { localStorage.removeItem(k); } catch(e) { /* ignore */ } }
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -13,7 +18,7 @@ export function AuthProvider({ children }) {
     const meta = u.user_metadata || {};
     const nickname = meta.full_name || meta.name || meta.preferred_username || u.email?.split('@')[0] || '나';
     const providers = u.app_metadata?.providers || [];
-    localStorage.setItem('goroom_user_id', u.id);
+    safeSetItem('goroom_user_id', u.id);
     setUser({ id: u.id, email: u.email, nickname, providers });
     return true;
   };
@@ -49,7 +54,7 @@ export function AuthProvider({ children }) {
       } else if (event === 'INITIAL_SESSION' && !session) {
         if (!resolved) {
           resolved = true;
-          const savedId = localStorage.getItem('goroom_user_id');
+          const savedId = safeGetItem('goroom_user_id');
           if (savedId) { setUser({ id: savedId, email: '', nickname: '나' }); }
           else { setUser(null); }
           setAuthChecked(true);
@@ -59,7 +64,7 @@ export function AuthProvider({ children }) {
         setUserFromSession(session);
       }
       if (event === 'SIGNED_OUT') {
-        localStorage.removeItem('goroom_user_id');
+        safeRemoveItem('goroom_user_id');
         setUser(null);
       }
     });
@@ -68,7 +73,7 @@ export function AuthProvider({ children }) {
     const authTimeout = setTimeout(() => {
       if (!resolved && mounted) {
         resolved = true;
-        const savedId = localStorage.getItem('goroom_user_id');
+        const savedId = safeGetItem('goroom_user_id');
         if (savedId) { setUser({ id: savedId, email: '', nickname: '나' }); }
         else { setUser(null); }
         setAuthChecked(true);
@@ -81,7 +86,7 @@ export function AuthProvider({ children }) {
   const handleLogin = useCallback((u) => setUser(u), []);
   const handleLogout = useCallback(async () => {
     await supabase.auth.signOut();
-    localStorage.removeItem('goroom_user_id');
+    safeRemoveItem('goroom_user_id');
     setUser(null);
   }, []);
 

@@ -42,20 +42,21 @@ export default async function handler(req, res) {
     <meta name="twitter:description" content="${esc(description)}"/>
     <meta name="twitter:image" content="${esc(image)}"/>`;
 
+  // 공통 헤더
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=60');
+
   // SPA index.html에 OG 태그 삽입
   try {
     const indexPath = join(process.cwd(), 'dist', 'index.html');
     let html = readFileSync(indexPath, 'utf-8');
     html = html.replace('</head>', `${ogTags}\n</head>`);
     html = html.replace(/<title>.*?<\/title>/, `<title>${esc(title)}</title>`);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=60');
     return res.status(200).send(html);
   } catch (e) {
     console.error('HTML read error:', e);
-    // Fallback: 크롤러용 간단 HTML
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.status(200).send(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">${ogTags}<title>${esc(title)}</title><meta http-equiv="refresh" content="0;url=/@${esc(slug)}"></head><body></body></html>`);
+    // Fallback: JavaScript redirect (카카오톡 WebView 등 meta refresh 미지원 대응)
+    return res.status(200).send(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">${ogTags}<title>${esc(title)}</title><script>window.location.replace('/@${esc(slug)}');</script></head><body><p style="text-align:center;padding:40px;font-family:sans-serif;color:#888">이동 중...</p></body></html>`);
   }
 }
 
