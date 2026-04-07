@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,8 +13,9 @@
     "app:sync": "npm run build && npx cap sync",
     "app:open:android": "npx cap open android",
     "app:open:ios": "npx cap open ios",
-    "desktop:dev": "NODE_ENV=development electron .",
-    "desktop:build": "npm run build && electron-builder"
+    "desktop:dev": "cross-env NODE_ENV=development DEV_PORT=3000 electron .",
+    "desktop:widget": "cross-env NODE_ENV=development electron . --widget",
+    "desktop:build": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1024.0",
@@ -30,6 +31,34 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1",
     "vite": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.goroom.app",
+    "productName": "구롬",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "electron/icon.png",
+      "uninstallerIcon": "electron/icon.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "구롬"
+    }
   }
 }

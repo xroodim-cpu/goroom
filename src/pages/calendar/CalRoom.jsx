@@ -15,7 +15,7 @@ import MemoForm from './MemoForm';
 import BudgetForm from './BudgetForm';
 import SimpleForm from '../../components/shared/SimpleForm';
 
-export default function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,userId,onSchClick,saveSchedule,saveMemo,deleteMemo,updateMemoPin,saveTodo,deleteTodo,updateTodoDone,updateDiaryLikes,updateDiaryComments,updateRoomInDb,deleteSchedule,deleteRoom,getName,getProfile}){
+export default function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,setSubPage,updateRoom,sb,me,userId,onSchClick,saveSchedule,saveMemo,deleteMemo,updateMemoPin,saveTodo,deleteTodo,updateTodoDone,updateDiaryLikes,updateDiaryComments,updateRoomInDb,deleteSchedule,deleteRoom,getName,getProfile,rooms}){
   const [sel,setSel]=useState(new Date()); const [nav,setNav]=useState(new Date()); const today=useMemo(()=>new Date(),[]);
   const activeMenus=ALL_MENUS.filter(m=>room.menus[m.id]);
   const myRole = room.members.find(m=>m.id===userId)?.role||'member';
@@ -24,7 +24,7 @@ export default function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,
 
   if(subPage==='settings'){if(!canManage(myRole)){setSubPage(null);return null;} return <RoomSettings room={room} updateRoom={updateRoom} friends={friends} memberList={memberList} sb={sb} goBack={()=>setSubPage(null)} setSubPage={setSubPage} updateRoomInDb={updateRoomInDb} deleteRoom={deleteRoom} userId={userId}/>;}
   if(subPage==='invite') return <InviteMembers room={room} updateRoom={updateRoom} friends={friends} sb={sb} goBack={()=>setSubPage(null)} userId={userId}/>;
-  if(subPage==='add-schedule') return <div className="gr-panel"><ScheduleForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} selDate={fmt(sel)} sb={sb} saveSchedule={saveSchedule} userId={userId}/></div>;
+  if(subPage==='add-schedule') return <div className="gr-panel"><ScheduleForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} selDate={fmt(sel)} sb={sb} saveSchedule={saveSchedule} userId={userId} rooms={rooms} me={me}/></div>;
   if(subPage==='add-memo') return <div className="gr-panel"><MemoForm goBack={()=>setSubPage(null)} room={room} updateRoom={updateRoom} sb={sb} saveMemoDb={saveMemo} userId={userId}/></div>;
   if(subPage==='add-todo') return <div className="gr-panel"><SimpleForm title="새 할일" fields={[{k:'title',l:'할 일'}]} goBack={()=>setSubPage(null)} onSave={async v=>{
     const todo = {id:uid(),text:v.title,done:false,createdAt:Date.now(),createdBy:userId,doneAt:null,doneBy:null};

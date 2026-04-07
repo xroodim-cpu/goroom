@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
           const meta = u.user_metadata || {};
           const existingArr = await sbGet(`/goroom_users?select=id&id=eq.${u.id}`);
           if (!existingArr || existingArr.length === 0) {
-            const linkCode = 'goroom-' + Math.random().toString(36).slice(2, 10);
+            const linkCode = Math.random().toString(36).slice(2, 10);
             await sbPost('goroom_users', {
               id: u.id, nickname: meta.full_name || meta.name || u.email?.split('@')[0] || '나',
               status_msg: '', profile_img: meta.avatar_url || meta.picture || null,

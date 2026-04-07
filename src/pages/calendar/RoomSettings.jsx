@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { sbDelete, sbPatch } from '../../supabase';
+import { sbGet, sbDelete, sbPatch } from '../../supabase';
 import { uploadToWasabi as uploadFile, deleteFromWasabi as deleteFile } from '../../wasabi';
 import I from '../../components/shared/Icon';
 import Avatar from '../../components/shared/Avatar';
@@ -66,22 +66,35 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
     updateRoom(room.id,r=>({...r,menus:newMenus}));
     await updateRoomInDb(room.id, { menus: newMenus });
   };
-  // 초대 링크
-  const [invPw, setInvPw] = useState(room.invitePassword || '');
-  const [invCopied, setInvCopied] = useState(false);
-  const generateInviteCode = async () => {
-    const code = Math.random().toString(36).slice(2, 10);
-    updateRoom(room.id, r => ({...r, inviteCode: code}));
-    await updateRoomInDb(room.id, { invite_code: code });
+  // 공유 링크 slug
+  const [slug, setSlug] = useState(room.slug || '');
+  const [slugEditing, setSlugEditing] = useState(false);
+  const [slugErr, setSlugErr] = useState('');
+  const [slugCopied, setSlugCopied] = useState(false);
+  const saveSlug = async () => {
+    const s = slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    if (!s) { setSlugErr('영문, 숫자, -, _ 만 사용 가능합니다'); return; }
+    if (s.length < 2) { setSlugErr('2글자 이상 입력하세요'); return; }
+    try {
+      // 중복 확인
+      const existing = await sbGet(`/goroom_rooms?select=id&slug=eq.${s}&id=neq.${room.id}`);
+      if (existing?.length > 0) { setSlugErr('이미 사용 중인 주소입니다'); return; }
+      setSlug(s);
+      updateRoom(room.id, r => ({...r, slug: s}));
+      await updateRoomInDb(room.id, { slug: s });
+      setSlugEditing(false); setSlugErr('');
+    } catch (e) { setSlugErr('저장 실패'); console.error(e); }
   };
+  const copySlugLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/@${slug}`).then(() => { setSlugCopied(true); setTimeout(() => setSlugCopied(false), 2000); });
+  };
+
+  // 가입 비밀번호
+  const [invPw, setInvPw] = useState(room.invitePassword || '');
   const saveInvitePassword = async () => {
     updateRoom(room.id, r => ({...r, invitePassword: invPw}));
     await updateRoomInDb(room.id, { invite_password: invPw || null });
     alert(invPw ? '비밀번호가 설정되었습니다.' : '비밀번호가 해제되었습니다.');
-  };
-  const copyInviteLink = () => {
-    const link = `${window.location.origin}?join=${room.inviteCode}`;
-    navigator.clipboard.writeText(link).then(() => { setInvCopied(true); setTimeout(() => setInvCopied(false), 2000); });
   };
   const handleDeleteRoom = async () => {
     if(!window.confirm('이 캘린더를 삭제하시겠습니까?')) return;
@@ -120,26 +133,40 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
       <div className="gr-pg-label" style={{marginTop:20}}>멤버 ({memberList.length}) <button className="gr-btn-invite" onClick={()=>setSubPage('invite')}><I n="userPlus" size={14} color="#fff"/> 초대</button></div>
       {memberList.map(m=> <div key={m.id} className="gr-set-member"><Avatar name={m.nickname} size={32}/><span>{m.nickname}</span><span className="gr-role-badge" data-role={m.role}>{ROLE_LABELS[m.role]||'멤버'}</span>{m.id!==userId&&<><select value={m.role} onChange={e=>handleRoleChange(m.id,e.target.value)} style={{marginLeft:'auto',fontSize:12,padding:'4px 8px',borderRadius:6,border:'1px solid var(--gr-brd)',background:'var(--gr-card)',color:'var(--gr-text)',fontFamily:'var(--gr-ff)'}}><option value="vice-owner">부방장</option><option value="member">멤버</option></select><button className="gr-icon-btn-sm" onClick={()=>handleRemoveMember(m.id)}><I n="x" size={14} color="var(--gr-exp)"/></button></>}</div>)}
 
-      {!room.isPersonal && <><div className="gr-pg-label" style={{marginTop:20}}><I n="link" size={14}/> 초대 링크</div>
-      {room.inviteCode ? (
-        <div style={{padding:'12px',background:'var(--gr-bg)',borderRadius:12,marginBottom:8}}>
-          <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}>초대 링크</div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <input className="gr-input" readOnly value={`${window.location.origin}?join=${room.inviteCode}`} style={{flex:1,fontSize:12}}/>
-            <button className="gr-btn-sm" onClick={copyInviteLink} style={{whiteSpace:'nowrap'}}>{invCopied?'복사됨!':'복사'}</button>
+      {!room.isPersonal && <><div className="gr-pg-label" style={{marginTop:20}}><I n="link" size={14}/> 캘린더 공유 링크</div>
+      <div style={{padding:'12px',background:'var(--gr-bg)',borderRadius:12,marginBottom:12}}>
+        <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}>캘린더 주소 (영문)</div>
+        {slug && !slugEditing ? (
+          <div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <input className="gr-input" readOnly value={`${window.location.origin}/@${slug}`} style={{flex:1,fontSize:12}}/>
+              <button className="gr-btn-sm" onClick={copySlugLink} style={{whiteSpace:'nowrap'}}>{slugCopied?'복사됨!':'복사'}</button>
+            </div>
+            <button className="gr-btn-sm-outline" onClick={()=>setSlugEditing(true)} style={{marginTop:8,fontSize:12}}>주소 변경</button>
           </div>
-          <button className="gr-btn-sm-outline" onClick={generateInviteCode} style={{marginTop:8,fontSize:12}}>링크 재생성</button>
-        </div>
-      ) : (
-        <button className="gr-btn-sm" onClick={generateInviteCode} style={{marginBottom:8}}>초대 링크 생성</button>
-      )}
+        ) : (
+          <div>
+            <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:4}}>
+              <span style={{fontSize:13,color:'var(--gr-t3)',whiteSpace:'nowrap'}}>goroom.kr/@</span>
+              <input className="gr-input" value={slug} onChange={e=>{setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g,''));setSlugErr('');}} placeholder="my-calendar" style={{flex:1,fontSize:13}}/>
+            </div>
+            {slugErr && <div style={{color:'var(--gr-exp)',fontSize:11,marginBottom:4}}>{slugErr}</div>}
+            <div style={{display:'flex',gap:6}}>
+              <button className="gr-btn-sm" onClick={saveSlug}>저장</button>
+              {slug && <button className="gr-btn-sm-outline" onClick={()=>{setSlug(room.slug||'');setSlugEditing(false);setSlugErr('');}}>취소</button>}
+            </div>
+            <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>SNS 공유 시 미리보기에 캘린더 정보가 표시됩니다</div>
+          </div>
+        )}
+      </div>
+
       <div style={{padding:'12px',background:'var(--gr-bg)',borderRadius:12,marginBottom:8}}>
         <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}><I n="lock" size={12}/> 가입 비밀번호 (선택)</div>
         <div style={{display:'flex',gap:6}}>
           <input className="gr-input" value={invPw} onChange={e=>setInvPw(e.target.value)} placeholder="비밀번호 미설정" style={{flex:1}}/>
           <button className="gr-btn-sm" onClick={saveInvitePassword}>저장</button>
         </div>
-        <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>설정하면 링크로 접속 시 비밀번호 입력 필요</div>
+        <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>설정하면 공유 링크로 접속 시 비밀번호 입력 필요</div>
       </div></>}
 
       <div className="gr-pg-label" style={{marginTop:20}}>기능 ON/OFF</div>

@@ -1,20 +1,36 @@
 import { useState, useRef } from 'react';
 import I from '../../components/shared/Icon';
+import StorageLimitModal from '../../components/shared/StorageLimitModal';
 import { uid, fmt, markBlobAsVideo, unmarkBlobUrl, isVideo } from '../../lib/helpers';
+import { getUserStorageUsage } from '../../lib/storageCheck';
 
 const MOODS=['😊','😢','😡','😴','🥰','😎','🤔','😱','🤗','😤'];
 const WEATHERS=['☀️','⛅','🌧️','❄️','🌪️','🌈','🌙','⚡'];
 
-export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}){
+export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId,rooms,me}){
   const [title,setTitle]=useState('');
   const [content,setContent]=useState('');
   const [images,setImages]=useState([]);
   const [mood,setMood]=useState('');
   const [weather,setWeather]=useState('');
   const [saving,setSaving]=useState(false);
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [storageUsed, setStorageUsed] = useState(0);
   const fileMapRef = useRef({});
-  const handleImages=(e)=>{
-    Array.from(e.target.files).forEach(file=>{
+  const handleImages=async(e)=>{
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
+    try {
+      const used = await getUserStorageUsage(userId, rooms||[]);
+      const limit = me?.storageLimit || 1073741824;
+      if(used >= limit) {
+        setStorageUsed(used);
+        setShowStorageModal(true);
+        e.target.value = '';
+        return;
+      }
+    } catch(err) { console.error('storage check error:', err); }
+    files.forEach(file=>{
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
       if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);
@@ -65,5 +81,6 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId}
       <textarea className="gr-input" value={content} onChange={e=>setContent(e.target.value)} placeholder="오늘의 일기를 작성하세요" rows={6} style={{resize:'none'}}/>
     </div>
     <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':'저장하기'}</button></div>
+    {showStorageModal && <StorageLimitModal onClose={()=>setShowStorageModal(false)} usedSize={storageUsed} storageLimit={me?.storageLimit||1073741824} userId={userId} onUpgradeComplete={()=>setShowStorageModal(false)}/>}
   </div>;
 }

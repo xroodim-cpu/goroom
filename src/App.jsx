@@ -3,6 +3,8 @@ import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
 import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl, extFromFile, isVideo as isVideoHelper } from './lib/helpers';
 import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
+import { Capacitor } from '@capacitor/core';
+import GoRoomWidget from './plugins/GoRoomWidget';
 import I from './components/shared/Icon';
 import Avatar from './components/shared/Avatar';
 import Toggle from './components/shared/Toggle';
@@ -64,6 +66,26 @@ export default function App() {
 function AppInner() {
   const { user, authChecked, handleLogin, handleLogout } = useAuth();
 
+  // 초대링크 감지: ?join=CODE 또는 /@slug → localStorage에 보존
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('join');
+    if (joinCode) {
+      localStorage.setItem('goroom_join_code', joinCode);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+    // /@slug 캘린더 공유 링크 감지
+    const slugMatch = window.location.pathname.match(/^\/@(.+)$/);
+    if (slugMatch) {
+      localStorage.setItem('goroom_join_slug', slugMatch[1]);
+    }
+    // OAuth 리다이렉트 후 원래 경로 복원용
+    const fullPath = window.location.pathname + window.location.search;
+    if (fullPath !== '/' && !window.location.hash.includes('access_token')) {
+      localStorage.setItem('goroom_redirect_path', fullPath);
+    }
+  }, []);
+
   if (!authChecked) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
       <div className="gr-loading-spinner"/>
@@ -84,7 +106,7 @@ function AppMain({ authUser, onLogout }){
 
   const userId = useMemo(() => getUserId(), []);
 
-  const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:''});
+  const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:'',storageLimit:1073741824});
   const [friends, setFriends] = useState([]);
   const [friendSuggestions, setFriendSuggestions] = useState([]); // 나를 추가한 사람들
   const [rooms, setRooms] = useState([]);
@@ -93,10 +115,52 @@ function AppMain({ authUser, onLogout }){
   const [schDetail, setSchDetail] = useState(null);
   const [friendSchs, setFriendSchs] = useState({});  // { friendId: schedules[] }
   const [profilePopup, setProfilePopup] = useState(null); // {id,nickname,statusMsg,profileImg,profileBg}
+  const [lastReadAlarm, setLastReadAlarm] = useState(() => parseInt(localStorage.getItem('gr_last_read_alarm') || '0'));
+
+  // 알림 데이터 계산 (다른 사용자가 만든 최근 활동)
+  const notifications = useMemo(() => {
+    const items = [];
+    const now = Date.now();
+    const weekAgo = now - 7 * 86400000;
+    rooms.forEach(room => {
+      (room.schedules || []).forEach(s => {
+        if (s.createdBy && s.createdBy !== userId && s.createdAt > weekAgo) {
+          items.push({ type: 'schedule', roomId: room.id, roomName: room.name, title: s.title, createdAt: s.createdAt, createdBy: s.createdBy });
+        }
+      });
+      (room.memos || []).forEach(m => {
+        if (m.createdBy && m.createdBy !== userId && m.createdAt > weekAgo) {
+          items.push({ type: 'memo', roomId: room.id, roomName: room.name, title: m.title, createdAt: m.createdAt, createdBy: m.createdBy });
+        }
+      });
+      (room.todos || []).forEach(t => {
+        if (t.createdBy && t.createdBy !== userId && t.createdAt > weekAgo) {
+          items.push({ type: 'todo', roomId: room.id, roomName: room.name, title: t.text, createdAt: t.createdAt, createdBy: t.createdBy });
+        }
+      });
+      (room.diaries || []).forEach(d => {
+        if (d.createdBy && d.createdBy !== userId && d.createdAt > weekAgo) {
+          items.push({ type: 'diary', roomId: room.id, roomName: room.name, title: d.content?.slice(0,30) || '다이어리', createdAt: d.createdAt, createdBy: d.createdBy });
+        }
+      });
+    });
+    items.sort((a, b) => b.createdAt - a.createdAt);
+    return items;
+  }, [rooms, userId]);
+
+  const unreadAlarmCount = useMemo(() => notifications.filter(n => n.createdAt > lastReadAlarm).length, [notifications, lastReadAlarm]);
+
+  // 방별 새 업데이트 여부 (다른 사용자가 lastReadAlarm 이후에 추가한 것)
+  const roomHasUpdate = useCallback((room) => {
+    return (room.schedules||[]).some(s => s.createdBy !== userId && s.createdAt > lastReadAlarm)
+      || (room.memos||[]).some(m => m.createdBy !== userId && m.createdAt > lastReadAlarm)
+      || (room.todos||[]).some(t => t.createdBy !== userId && t.createdAt > lastReadAlarm)
+      || (room.diaries||[]).some(d => d.createdBy !== userId && d.createdAt > lastReadAlarm);
+  }, [userId, lastReadAlarm]);
 
   // URL에서 네비게이션 상태 파생
   const path = location.pathname;
-  const tab = path.startsWith('/calendar') ? 'rooms' : path.startsWith('/more') ? 'more' : 'friends';
+  const tab = path.startsWith('/calendar') ? 'rooms' : path.startsWith('/alarm') ? 'alarm' : path.startsWith('/more') ? 'more' : 'friends';
   const setTab = (t) => {
     if (t === 'friends') navigate('/');
     else if (t === 'rooms') navigate('/calendar');
@@ -134,6 +198,12 @@ function AppMain({ authUser, onLogout }){
     if (path === '/more/storage') return { page: 'storage' };
     if (path === '/schedule-detail') return { page: 'sch-detail' };
     if (path === '/schedule-edit') return { page: 'sch-edit' };
+    if (path === '/alarm') return { page: 'alarm-list' };
+    if (path === '/payment/success') return { page: 'payment-success' };
+    if (path === '/payment/fail') return { page: 'payment-fail' };
+    // /@slug 캘린더 공유 링크
+    const slugMatch = path.match(/^\/@(.+)$/);
+    if (slugMatch) return { page: 'join-slug', slug: slugMatch[1] };
     return { page: null, selectedId: null };
   };
   const nav = deriveNav();
@@ -181,9 +251,9 @@ function AppMain({ authUser, onLogout }){
         // 유저 처리
         if (userArr.length > 0) {
           const eu = userArr[0];
-          setMe({ id: eu.id, nickname: eu.nickname||'나', statusMsg: eu.status_msg||'', linkCode: eu.link_code||'', bio: '', profileImg: eu.profile_img||null, profileBg: eu.profile_bg||null, birthday: eu.birthday||'' });
+          setMe({ id: eu.id, nickname: eu.nickname||'나', statusMsg: eu.status_msg||'', linkCode: eu.link_code||'', bio: '', profileImg: eu.profile_img||null, profileBg: eu.profile_bg||null, birthday: eu.birthday||'', storageLimit: eu.storage_limit||1073741824 });
         } else {
-          const linkCode = 'goroom-' + shortId();
+          const linkCode = shortId();
           await sbPost('goroom_users', { id: userId, nickname: '나', status_msg: '', profile_img: null, profile_bg: null, link_code: linkCode, birthday: '' });
           setMe(prev => ({ ...prev, linkCode }));
         }
@@ -234,7 +304,7 @@ function AppMain({ authUser, onLogout }){
           (allDi||[]).forEach(d => { (diByRoom[d.room_id]||(diByRoom[d.room_id]=[])).push(d); });
           const loadedRooms = (roomsArr||[]).map(r => ({
             id: r.id, name: r.name, desc: r.description||'', isPersonal: r.is_personal||false, isPublic: r.is_public!==false,
-            thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
+            thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'', slug: r.slug||'',
             members: (mbByRoom[r.id]||[]).map(m => ({id: m.user_id, role: m.role||'member'})), newCount: 0, nearestSchedule: null,
             menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
             settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
@@ -264,34 +334,120 @@ function AppMain({ authUser, onLogout }){
         }
       } catch (e) {
         console.error('Load error:', e);
-      } finally { clearTimeout(loadTimeout); setLoading(false); }
+      } finally {
+        clearTimeout(loadTimeout); setLoading(false);
+        // 네이티브 앱: 위젯에 세션 전달 + 갱신
+        if (Capacitor.isNativePlatform()) {
+          GoRoomWidget.saveUserSession({ userId, supabaseUrl: 'https://dyotbojxtcqhcmrefofb.supabase.co', supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5b3Rib2p4dGNxaGNtcmVmb2ZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU2NTIsImV4cCI6MjA5MDI5MTY1Mn0.dJp5-vqXoW_9s-Br2vyn8sx2fo2wDWpNWlr5tqgddqo' }).catch(() => {});
+          GoRoomWidget.refreshWidget().catch(() => {});
+        }
+        // Electron 위젯용 userId 저장
+        try { localStorage.setItem('gr_widget_user', userId); } catch {}
+
+      }
     })();
     return () => clearTimeout(loadTimeout);
   }, [userId]);
 
-  // 초대 링크 처리 (?join=CODE)
+  // 초대 링크 처리 (?join=CODE, /@slug, localStorage 보존)
   const [joinModal, setJoinModal] = useState(null);
   useEffect(() => {
     if (loading) return;
-    const params = new URLSearchParams(window.location.search);
-    const joinCode = params.get('join');
-    if (!joinCode) return;
-    window.history.replaceState(null, '', window.location.pathname);
     (async () => {
-      const roomArr = await sbGet(`/goroom_rooms?select=id,name,invite_password&invite_code=eq.${joinCode}`);
-      const room = roomArr?.[0];
-      if (!room) { alert('유효하지 않은 초대 링크입니다.'); return; }
-      // 이미 멤버인지 확인
-      const existingArr = await sbGet(`/goroom_room_members?select=user_id&room_id=eq.${room.id}&user_id=eq.${userId}`);
-      const existing = existingArr?.[0];
-      if (existing) { alert('이미 가입된 캘린더입니다.'); navigate(`/calendar/${room.id}/cal`); return; }
-      if (room.invite_password) {
-        setJoinModal({ roomId: room.id, roomName: room.name, needPassword: true });
-      } else {
-        await joinRoom(room.id, room.name);
+      try {
+        // 1) ?join=CODE 확인
+        const params = new URLSearchParams(window.location.search);
+        let joinCode = params.get('join');
+        if (joinCode) window.history.replaceState(null, '', window.location.pathname);
+        else joinCode = localStorage.getItem('goroom_join_code');
+        localStorage.removeItem('goroom_join_code');
+
+        // 2) /@slug 확인
+        let joinSlug = localStorage.getItem('goroom_join_slug');
+        localStorage.removeItem('goroom_join_slug');
+        // 현재 URL이 /@slug인 경우도 확인
+        const slugFromPath = window.location.pathname.match(/^\/@(.+)$/);
+        if (slugFromPath) joinSlug = slugFromPath[1];
+
+        // 3) 리다이렉트 경로 복원
+        const redirectPath = localStorage.getItem('goroom_redirect_path');
+        localStorage.removeItem('goroom_redirect_path');
+
+        let targetRoom = null;
+
+        if (joinCode) {
+          // invite_code로 방 찾기
+          const roomArr = await sbGet(`/goroom_rooms?select=id,name,description,invite_password,thumbnail_url&invite_code=eq.${joinCode}`);
+          targetRoom = roomArr?.[0];
+        } else if (joinSlug) {
+          // slug로 방 찾기
+          const roomArr = await sbGet(`/goroom_rooms?select=id,name,description,invite_password,thumbnail_url&slug=eq.${joinSlug}`);
+          targetRoom = roomArr?.[0];
+        } else if (redirectPath && redirectPath !== '/') {
+          // OAuth 후 경로 복원 (캘린더 직접 링크)
+          const calMatch = redirectPath.match(/^\/calendar\/([^/]+)/);
+          if (calMatch) {
+            const roomId = calMatch[1];
+            const alreadyMember = rooms.some(r => r.id === roomId);
+            if (alreadyMember) { navigate(redirectPath, { replace: true }); return; }
+            // 비멤버 → 방 정보 조회
+            const roomArr = await sbGet(`/goroom_rooms?select=id,name,description,invite_password,thumbnail_url&id=eq.${roomId}`);
+            targetRoom = roomArr?.[0];
+          } else {
+            navigate(redirectPath, { replace: true });
+            return;
+          }
+        } else {
+          return; // 처리할 것 없음
+        }
+
+        if (!targetRoom) {
+          // 방을 찾을 수 없음 — joinSlug URL이면 정리
+          if (joinSlug || slugFromPath) navigate('/', { replace: true });
+          return;
+        }
+
+        // 이미 멤버인지 확인
+        const isMember = rooms.some(r => r.id === targetRoom.id);
+        if (isMember) {
+          navigate(`/calendar/${targetRoom.id}/cal`, { replace: true });
+          return;
+        }
+
+        // 비멤버 → 가입 모달 표시
+        const memberArr = await sbGet(`/goroom_room_members?select=user_id&room_id=eq.${targetRoom.id}`);
+        setJoinModal({
+          roomId: targetRoom.id,
+          roomName: targetRoom.name,
+          roomDesc: targetRoom.description || '',
+          roomThumb: targetRoom.thumbnail_url || '',
+          memberCount: memberArr?.length || 0,
+          needPassword: !!targetRoom.invite_password,
+        });
+
+      } catch (e) {
+        console.error('Join flow error:', e);
       }
     })();
   }, [loading]);
+
+  // 결제 성공 콜백 처리
+  useEffect(() => {
+    if (loading || page !== 'payment-success') return;
+    const params = new URLSearchParams(window.location.search);
+    const planId = params.get('plan');
+    if (!planId) { navigate('/'); return; }
+    const PLANS_MAP = { plan_20g: 20*1024*1024*1024, plan_50g: 50*1024*1024*1024, plan_100g: 100*1024*1024*1024 };
+    const newLimit = PLANS_MAP[planId];
+    if (!newLimit) { navigate('/'); return; }
+    (async () => {
+      try {
+        await sbPatch(`goroom_users?id=eq.${userId}`, { storage_limit: newLimit });
+        setMe(prev => ({ ...prev, storageLimit: newLimit }));
+      } catch (e) { console.error('Storage upgrade error:', e); }
+      navigate('/');
+    })();
+  }, [loading, page]);
 
   const joinRoom = async (roomId, roomName) => {
     try {
@@ -309,7 +465,7 @@ function AppMain({ authUser, onLogout }){
       if (!r) throw new Error('Room not found');
       const newRoom = {
         id: r.id, name: r.name, desc: r.description||'', isPersonal: false, isPublic: r.is_public!==false,
-        thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'',
+        thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'', slug: r.slug||'',
         members: (allMembers||[]).map(m=>({id: m.user_id, role: m.role||'member'})), newCount:0, nearestSchedule:null,
         menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
         settings: {...DEF_SETTINGS,...(r.settings||{})},
@@ -736,28 +892,47 @@ function AppMain({ authUser, onLogout }){
     return <div className="gr-root"><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><div className="gr-loading-spinner"/></div></div>;
   }
 
-  // 비밀번호 입력 모달
-  const JoinPasswordModal = () => {
+  // 캘린더 가입 모달 (썸네일 + 이름 + 비밀번호)
+  const JoinModal = () => {
     const [pw, setPw] = useState('');
     const [err, setErr] = useState('');
+    const [joining, setJoining] = useState(false);
+    const j = joinModal;
     const tryJoin = async () => {
-      const roomArr = await sbGet(`/goroom_rooms?select=invite_password&id=eq.${joinModal.roomId}`);
-      const room = roomArr?.[0];
-      if (room && room.invite_password === pw) {
-        await joinRoom(joinModal.roomId, joinModal.roomName);
-      } else {
-        setErr('비밀번호가 틀렸습니다.');
+      if (j.needPassword) {
+        const roomArr = await sbGet(`/goroom_rooms?select=invite_password&id=eq.${j.roomId}`);
+        const room = roomArr?.[0];
+        if (!room || room.invite_password !== pw) { setErr('비밀번호가 틀렸습니다.'); return; }
       }
+      setJoining(true);
+      try { await joinRoom(j.roomId, j.roomName); setJoinModal(null); }
+      catch { setErr('가입에 실패했습니다.'); setJoining(false); }
     };
-    return <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <div style={{background:'#fff',borderRadius:16,padding:24,width:'90%',maxWidth:340}}>
-        <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>캘린더 가입</div>
-        <div style={{fontSize:13,color:'var(--gr-t3)',marginBottom:16}}>"{joinModal.roomName}" 에 가입하려면 비밀번호를 입력하세요.</div>
-        <input className="gr-input" type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr('');}} placeholder="비밀번호" onKeyDown={e=>e.key==='Enter'&&tryJoin()} autoFocus/>
-        {err && <div style={{color:'var(--gr-exp)',fontSize:12,marginTop:4}}>{err}</div>}
-        <div style={{display:'flex',gap:8,marginTop:16}}>
-          <button className="gr-btn-sm-outline" onClick={()=>setJoinModal(null)} style={{flex:1}}>취소</button>
-          <button className="gr-btn-sm" onClick={tryJoin} style={{flex:1}}>가입</button>
+    const handleCancel = () => { setJoinModal(null); navigate('/calendar', { replace: true }); };
+    return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={handleCancel}>
+      <div style={{background:'#fff',borderRadius:20,width:'90%',maxWidth:360,overflow:'hidden'}} onClick={e=>e.stopPropagation()}>
+        {/* 썸네일 헤더 */}
+        <div style={{width:'100%',aspectRatio:'1/1',background:j.roomThumb?`url(${j.roomThumb}) center/cover no-repeat`:'linear-gradient(135deg,#cc222c 0%,#e85d5d 100%)',position:'relative'}}>
+          <button className="gr-icon-btn" onClick={handleCancel} style={{position:'absolute',top:10,right:10,color:'#fff',background:'rgba(0,0,0,.25)',borderRadius:'50%',width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}><I n="x" size={16}/></button>
+        </div>
+        {/* 캘린더 정보 */}
+        <div style={{padding:'20px 24px'}}>
+          <div style={{fontSize:18,fontWeight:700}}>{j.roomName}</div>
+          {j.roomDesc && <div style={{fontSize:13,color:'var(--gr-t3)',marginTop:4}}>{j.roomDesc}</div>}
+          <div style={{fontSize:12,color:'var(--gr-t3)',marginTop:8,display:'flex',alignItems:'center',gap:4}}>
+            <I n="users" size={13} color="var(--gr-t3)"/> {j.memberCount}명 참여 중
+          </div>
+          {/* 비밀번호 입력 */}
+          {j.needPassword && <div style={{marginTop:16}}>
+            <div style={{fontSize:13,color:'var(--gr-t2)',marginBottom:8}}>이 캘린더는 비밀번호가 필요합니다</div>
+            <input className="gr-input" type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr('');}} placeholder="비밀번호를 입력하세요" onKeyDown={e=>e.key==='Enter'&&tryJoin()} autoFocus/>
+          </div>}
+          {err && <div style={{color:'var(--gr-exp)',fontSize:12,marginTop:6}}>{err}</div>}
+          {/* 버튼 */}
+          <div style={{display:'flex',gap:8,marginTop:20}}>
+            <button style={{flex:1,padding:'12px',borderRadius:12,border:'1px solid var(--gr-brd)',background:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',color:'var(--gr-t2)'}} onClick={handleCancel}>취소</button>
+            <button style={{flex:1,padding:'12px',borderRadius:12,border:'none',background:'var(--gr-acc)',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',opacity:joining?.6:1}} onClick={tryJoin} disabled={joining}>{joining?'가입 중...':'가입하기'}</button>
+          </div>
         </div>
       </div>
     </div>;
@@ -766,6 +941,10 @@ function AppMain({ authUser, onLogout }){
   const renderDetail = () => {
     const sb = !isWide;
 
+    /* 결제 처리 */
+    if(page==='payment-success') return <div className="gr-panel" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:16}}><div className="gr-loading-spinner"/><div style={{fontSize:14,color:'var(--gr-t3)'}}>결제 처리 중...</div></div>;
+    if(page==='payment-fail') return <div className="gr-panel" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:16}}><div style={{fontSize:48}}>😞</div><div style={{fontSize:16,fontWeight:700}}>결제가 취소되었습니다</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>다시 시도하시려면 아래 버튼을 눌러주세요</div><button className="gr-save-btn" style={{marginTop:8,width:'auto',padding:'10px 32px'}} onClick={()=>navigate('/')}>돌아가기</button></div>;
+
     /* 스케줄 수정 */
     if(page==='sch-edit' && schDetail){
       const s = schDetail;
@@ -773,7 +952,7 @@ function AppMain({ authUser, onLogout }){
       const room = rooms.find(r => r.schedules.some(sc => sc.id === origId));
       if(room){
         const editSch = s._recurring ? {...room.schedules.find(sc=>sc.id===origId)} : s;
-        return <div className="gr-panel"><ScheduleForm goBack={(savedSch)=>{if(savedSch) setSchDetail(savedSch); navigate(-1);}} room={room} updateRoom={updateRoom} selDate={editSch.date} sb={sb} saveSchedule={saveSchedule} updateSchedule={updateScheduleInDb} userId={userId} editData={editSch}/></div>;
+        return <div className="gr-panel"><ScheduleForm goBack={(savedSch)=>{if(savedSch) setSchDetail(savedSch); navigate(-1);}} room={room} updateRoom={updateRoom} selDate={editSch.date} sb={sb} saveSchedule={saveSchedule} updateSchedule={updateScheduleInDb} userId={userId} editData={editSch} rooms={rooms} me={me}/></div>;
       }
     }
 
@@ -880,12 +1059,15 @@ function AppMain({ authUser, onLogout }){
     if(page==='notification-settings') return <NotificationSettings goBack={goBack} sb={sb}/>;
     if(page==='app-settings') return <AppSettings goBack={goBack} sb={sb} userId={userId} onLogout={onLogout}/>;
     if(page==='trash') return <TrashPage goBack={goBack} sb={sb} userId={userId} rooms={rooms} setRooms={setRooms} updateRoom={updateRoom}/>;
-    if(page==='storage') return <StoragePage goBack={goBack} rooms={rooms} userId={userId}/>;
+    if(page==='storage') return <StoragePage goBack={goBack} rooms={rooms} userId={userId} me={me}/>;
+
+    // /@slug 공유링크 — join useEffect에서 처리하므로 로딩만 표시
+    if(page==='join-slug') return <div className="gr-panel" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%'}}><div className="gr-loading-spinner"/></div>;
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId);
       if(!room) return <JoinRoomPrompt roomId={selectedId} userId={userId} joinRoom={joinRoom} goBack={goBack} sb={sb}/>;
-      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile}/>;
+      return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile} rooms={rooms}/>;
     }
     if(page==='add-room') return <AddRoomPage goBack={goBack} setRooms={setRooms} sb={sb} friends={friends} createRoom={createRoom} userId={userId}/>;
     return null;
@@ -906,25 +1088,42 @@ function AppMain({ authUser, onLogout }){
             const updatedF=filtered.filter(f=>f.updatedAt&&(Date.now()-f.updatedAt)<86400000*7);
             const favF=filtered.filter(f=>f.favorite);
             return <div>
-              {friendSuggestions.length>0&&!q&&<div><div className="gr-section-label">👋 친구추천 {friendSuggestions.length}</div><div className="gr-suggest-scroll">{friendSuggestions.map(s=><div key={s.id} className="gr-suggest-card" onClick={()=>setProfilePopup(s)}><Avatar name={s.nickname} size={52} src={s.profileImg}/><div className="gr-suggest-name">{s.nickname}</div><button className="gr-suggest-add-btn" onClick={async(e)=>{e.stopPropagation();await addFriendById(s.id);setFriendSuggestions(prev=>prev.filter(x=>x.id!==s.id));}}>친구 추가</button></div>)}</div></div>}
+              {friendSuggestions.length>0&&!q&&<div><div className="gr-section-label">👋 친구추천 {friendSuggestions.length}</div><div className="gr-suggest-scroll">{friendSuggestions.map(s=><div key={s.id} className="gr-suggest-card" onClick={()=>setProfilePopup(s)}><Avatar name={s.nickname} size={52} src={s.profileImg}/><div className="gr-suggest-name">{s.nickname}</div></div>)}</div></div>}
               {birthdayF.length>0&&<div><div className="gr-section-label">🎂 생일인 친구 {birthdayF.length}</div>{birthdayF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} 🎂</div><div className="gr-friend-status">오늘 생일이에요!</div></div></div>)}</div>}
               {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               <div className="gr-section-label">친구 {filtered.length}</div>
-              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#cc222c"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
+              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><div className="gr-avatar-wrap">{f.updatedAt&&(Date.now()-f.updatedAt)<86400000&&<span className="gr-new-dot"/>}<Avatar name={f.nickname} size={44} src={f.profileImg}/></div><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#cc222c"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
             </div>;
           })()}
         </div></>}
-      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>{navigate('/calendar/new');}}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined} src={r.thumbnailUrl}/><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
+      {tab==='rooms'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">캘린더</div><div className="gr-tab-top-actions"><button className="gr-tab-top-btn"><I n="search" size={20}/></button><button className="gr-tab-top-btn" onClick={()=>{navigate('/calendar/new');}}><I n="plus" size={20}/></button></div></div><div className="gr-tab-body">{rooms.map(r=> <div key={r.id} className={`gr-room-row ${selectedId===r.id&&page==='room'?'active':''}`} onClick={()=>openRoom(r.id)}><div className="gr-avatar-wrap">{roomHasUpdate(r)&&<span className="gr-new-dot"/>}<Avatar name={r.name} size={52} color={r.isPersonal?'var(--gr-acc)':undefined} src={r.thumbnailUrl}/></div><div className="gr-room-info"><div className="gr-room-name">{r.name}{r.isPersonal&&<span className="gr-badge-my">MY</span>}{!r.isPublic&&<I n="lock" size={12} color="var(--gr-t3)"/>}</div><div className="gr-room-preview">{r.nearestSchedule||r.desc}</div></div><div className="gr-room-meta">{r.newCount>0&&<div className="gr-room-new">{r.newCount}</div>}<div className="gr-room-members"><I n="users" size={12} color="var(--gr-t3)"/> {r.members.length}</div></div></div>)}</div></>}
+      {tab==='alarm'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">알림</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body">
+        {notifications.length===0?<div style={{padding:40,textAlign:'center',color:'var(--gr-t3)',fontSize:13}}>새로운 알림이 없습니다</div>
+        :notifications.map((n,i)=>{
+          const isUnread = n.createdAt > lastReadAlarm;
+          const typeLabel = {schedule:'일정',memo:'메모',todo:'할일',diary:'다이어리'}[n.type]||'';
+          const timeAgo = (()=>{const d=Date.now()-n.createdAt;if(d<60000)return '방금';if(d<3600000)return Math.floor(d/60000)+'분 전';if(d<86400000)return Math.floor(d/3600000)+'시간 전';return Math.floor(d/86400000)+'일 전';})();
+          const creator = (()=>{for(const f of friends){if(f.id===n.createdBy)return f;}return null;})();
+          const creatorName = creator?.nickname || '멤버';
+          return <div key={`${n.type}-${n.createdAt}-${i}`} className={`gr-alarm-item ${isUnread?'unread':''}`} onClick={()=>navigate(`/calendar/${n.roomId}/cal`)}>
+            <div className="gr-alarm-icon"><I n={n.type==='schedule'?'cal':n.type==='memo'?'edit':n.type==='todo'?'check':'book'} size={18} color={isUnread?'var(--gr-acc)':'var(--gr-t3)'}/></div>
+            <div className="gr-alarm-content">
+              <div className="gr-alarm-title"><strong>{creatorName}</strong>님이 <strong>{n.roomName}</strong>에 {typeLabel}을 추가했습니다</div>
+              <div className="gr-alarm-sub">{n.title}{n.title?' · ':''}{timeAgo}</div>
+            </div>
+          </div>;
+        })}
+      </div></>}
       {tab==='more'&&<><div className="gr-tab-top"><div className="gr-tab-top-title">더보기</div><div className="gr-tab-top-actions"/></div><div className="gr-tab-body" style={{padding:20}}>
         <div className="gr-more-item" onClick={()=>{navigate('/more/info');}}><I n="info" size={20}/><span>내 정보</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/add-friend');}}><I n="link" size={20}/><span>친구 추가 코드</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/notifications');}}><I n="bell" size={20}/><span>알림 설정</span></div>
-        <div className="gr-more-item" onClick={()=>{navigate('/more/settings');}}><I n="gear" size={20}/><span>설정</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/storage');}}><I n="folder" size={20}/><span>용량</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/trash');}}><I n="trash" size={20}/><span>휴지통</span></div>
+        <div className="gr-more-item" onClick={()=>{navigate('/more/settings');}}><I n="gear" size={20}/><span>설정</span></div>
       </div></>}
-      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{if(isWide)navigate('/profile');else navigate('/');}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{if(isWide){const myRoom=rooms.find(r=>r.isPersonal);navigate(myRoom?`/calendar/${myRoom.id}/cal`:'/calendar');}else navigate('/calendar');}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{if(isWide)navigate('/more/info');else navigate('/more');}}><I n="more" size={22}/><span>더보기</span></button></div>
+      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{if(isWide)navigate('/profile');else navigate('/');}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{if(isWide){const myRoom=rooms.find(r=>r.isPersonal);navigate(myRoom?`/calendar/${myRoom.id}/cal`:'/calendar');}else navigate('/calendar');}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='alarm'?'on':''}`} onClick={()=>{const now=Date.now();setLastReadAlarm(now);localStorage.setItem('gr_last_read_alarm',String(now));navigate('/alarm');}}><div className="gr-btab-bell-wrap"><I n="bell" size={22}/>{unreadAlarmCount>0&&<span className="gr-btab-badge">{unreadAlarmCount>99?'99+':unreadAlarmCount}</span>}</div><span>알림</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{if(isWide)navigate('/more/info');else navigate('/more');}}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>
   );
 
@@ -934,16 +1133,16 @@ function AppMain({ authUser, onLogout }){
     const isFriend = friends.some(f => f.id === p.id);
     return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setProfilePopup(null)}>
       <div style={{width:'90%',maxWidth:320,borderRadius:20,overflow:'hidden',background:'var(--gr-bg)'}} onClick={e=>e.stopPropagation()}>
-        <div style={{width:'100%',aspectRatio:'16/9',background:p.profileBg?`url(${p.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{width:'100%',aspectRatio:'1/1',background:p.profileBg?`url(${p.profileBg}) center/cover no-repeat`:'linear-gradient(135deg,#4A90D9 0%,#00B4D8 100%)',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
           <button className="gr-icon-btn" onClick={()=>setProfilePopup(null)} style={{position:'absolute',top:8,right:8,color:'#fff'}}><I n="x" size={18}/></button>
         </div>
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'0 20px 20px',marginTop:-40}}>
-          <div style={{width:80,height:80,borderRadius:'50%',border:'3px solid var(--gr-bg)',overflow:'hidden',background:'var(--gr-bg2)'}}>
-            {p.profileImg?<img src={p.profileImg} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<Avatar name={p.nickname} size={80}/>}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'0 20px 20px',marginTop:-44,position:'relative',zIndex:2}}>
+          <div style={{width:88,height:88,borderRadius:'40%',border:'3px solid var(--gr-bg)',overflow:'hidden',background:'var(--gr-bg2)',boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}}>
+            {p.profileImg?<img src={p.profileImg} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<Avatar name={p.nickname} size={88}/>}
           </div>
           <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{p.nickname}</div>
           <div style={{fontSize:13,color:'var(--gr-t3)',marginTop:2}}>{p.statusMsg||''}</div>
-          {!isFriend && p.id!==userId && <button className="gr-suggest-add-btn" style={{marginTop:14,padding:'8px 28px',fontSize:13,borderRadius:20}} onClick={async()=>{await addFriendById(p.id);setFriendSuggestions(prev=>prev.filter(x=>x.id!==p.id));setProfilePopup(null);}}>친구 추가</button>}
+          {!isFriend && p.id!==userId && <button style={{marginTop:14,padding:'8px 28px',fontSize:13,borderRadius:20,fontWeight:600,color:'#fff',background:'var(--gr-acc)',border:'none',cursor:'pointer'}} onClick={async()=>{await addFriendById(p.id);setFriendSuggestions(prev=>prev.filter(x=>x.id!==p.id));setProfilePopup(null);}}>친구 추가</button>}
           {isFriend && <div style={{marginTop:14,fontSize:13,color:'var(--gr-t3)'}}>이미 친구입니다</div>}
         </div>
       </div>
@@ -951,6 +1150,6 @@ function AppMain({ authUser, onLogout }){
   };
 
   const detail = renderDetail();
-  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}{profilePopup&&<ProfilePopup/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
-  return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinPasswordModal/>}{profilePopup&&<ProfilePopup/>}{detail || renderSidebar()}</div></AppProvider>);
+  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
+  return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}{detail || renderSidebar()}</div></AppProvider>);
 }

@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
 import I from '../../components/shared/Icon';
 import Toggle from '../../components/shared/Toggle';
+import StorageLimitModal from '../../components/shared/StorageLimitModal';
 import { uid, shortId, COLORS, DEF_SETTINGS, isVideo, markBlobAsVideo, unmarkBlobUrl } from '../../lib/helpers';
+import { getUserStorageUsage } from '../../lib/storageCheck';
 
-export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,updateSchedule,userId,editData}){
+export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSchedule,updateSchedule,userId,editData,rooms,me}){
   const isEdit = !!editData;
   const st = room.settings || DEF_SETTINGS;
   const menus = room.menus;
@@ -37,10 +39,25 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [images,setImages]=useState(editData?.images||[]);
   const [mood,setMood]=useState(editData?.mood||'');
   const [saving, setSaving] = useState(false);
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [storageUsed, setStorageUsed] = useState(0);
   // File 객체를 blob URL에 매핑 (메모리 효율: readAsDataURL 대신 createObjectURL 사용)
   const fileMapRef = useRef({});
-  const handleImages=(e)=>{
-    Array.from(e.target.files).forEach(file=>{
+  const handleImages=async(e)=>{
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
+    // 용량 체크
+    try {
+      const used = await getUserStorageUsage(userId, rooms||[]);
+      const limit = me?.storageLimit || 1073741824;
+      if(used >= limit) {
+        setStorageUsed(used);
+        setShowStorageModal(true);
+        e.target.value = '';
+        return;
+      }
+    } catch(err) { console.error('storage check error:', err); }
+    files.forEach(file=>{
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
       if(file.type.startsWith('video/')) markBlobAsVideo(blobUrl);
@@ -218,5 +235,6 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
       <div style={{height:20}}/>
     </div>
     <div className="gr-save-bar"><button className="gr-save-btn" disabled={!title.trim()||saving} onClick={save}>{saving?'저장중...':(isEdit?'수정하기':'저장하기')}</button></div>
+    {showStorageModal && <StorageLimitModal onClose={()=>setShowStorageModal(false)} usedSize={storageUsed} storageLimit={me?.storageLimit||1073741824} userId={userId} onUpgradeComplete={()=>setShowStorageModal(false)}/>}
   </div>;
 }
