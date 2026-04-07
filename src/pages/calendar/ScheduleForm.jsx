@@ -43,20 +43,27 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [storageUsed, setStorageUsed] = useState(0);
   // File 객체를 blob URL에 매핑 (메모리 효율: readAsDataURL 대신 createObjectURL 사용)
   const fileMapRef = useRef({});
-  const handleImages=async(e)=>{
-    const files = Array.from(e.target.files);
-    if(!files.length) return;
-    // 용량 체크
+  const fileInputRef = useRef(null);
+  const [storageChecking, setStorageChecking] = useState(false);
+  const handleAddClick = async () => {
+    if (storageChecking) return;
+    setStorageChecking(true);
     try {
       const used = await getUserStorageUsage(userId, rooms||[]);
       const limit = me?.storageLimit || 1073741824;
-      if(used >= limit) {
+      if (used >= limit) {
         setStorageUsed(used);
         setShowStorageModal(true);
-        e.target.value = '';
+        setStorageChecking(false);
         return;
       }
     } catch(err) { console.error('storage check error:', err); }
+    setStorageChecking(false);
+    fileInputRef.current?.click();
+  };
+  const handleImages=(e)=>{
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
     files.forEach(file=>{
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
@@ -224,11 +231,11 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
             {isVideo(img)&&<div className="gr-video-badge"><I n="play" size={14} color="#fff"/></div>}
             <button className="gr-diary-upload-remove" onClick={()=>removeImage(i)}><I n="x" size={12} color="#fff"/></button>
           </div>)}
-          <label className="gr-diary-upload-add">
-            <I n="plus" size={24} color="var(--gr-t3)"/>
-            <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>추가</span>
-            <input type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
-          </label>
+          <div className="gr-diary-upload-add" onClick={handleAddClick} style={{cursor:'pointer'}}>
+            {storageChecking ? <div className="gr-loading-spinner" style={{width:20,height:20}}/> : <I n="plus" size={24} color="var(--gr-t3)"/>}
+            <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>{storageChecking?'확인중':'추가'}</span>
+            <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
+          </div>
         </div>
       </div>
 

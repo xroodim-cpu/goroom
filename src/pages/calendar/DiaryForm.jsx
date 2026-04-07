@@ -17,19 +17,27 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId,
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [storageUsed, setStorageUsed] = useState(0);
   const fileMapRef = useRef({});
-  const handleImages=async(e)=>{
-    const files = Array.from(e.target.files);
-    if(!files.length) return;
+  const fileInputRef = useRef(null);
+  const [storageChecking, setStorageChecking] = useState(false);
+  const handleAddClick = async () => {
+    if (storageChecking) return;
+    setStorageChecking(true);
     try {
       const used = await getUserStorageUsage(userId, rooms||[]);
       const limit = me?.storageLimit || 1073741824;
-      if(used >= limit) {
+      if (used >= limit) {
         setStorageUsed(used);
         setShowStorageModal(true);
-        e.target.value = '';
+        setStorageChecking(false);
         return;
       }
     } catch(err) { console.error('storage check error:', err); }
+    setStorageChecking(false);
+    fileInputRef.current?.click();
+  };
+  const handleImages=(e)=>{
+    const files = Array.from(e.target.files);
+    if(!files.length) return;
     files.forEach(file=>{
       const blobUrl = URL.createObjectURL(file);
       fileMapRef.current[blobUrl] = file;
@@ -69,11 +77,11 @@ export default function DiaryForm({goBack,room,updateRoom,sb,saveDiaryDb,userId,
           {isVideo(img)?<video src={img} muted style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>:<img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:8}}/>}
           <button className="gr-diary-upload-remove" onClick={()=>removeImage(i)}><I n="x" size={12} color="#fff"/></button>
         </div>)}
-        <label className="gr-diary-upload-add">
-          <I n="plus" size={24} color="var(--gr-t3)"/>
-          <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>추가</span>
-          <input type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
-        </label>
+        <div className="gr-diary-upload-add" onClick={handleAddClick} style={{cursor:'pointer'}}>
+          {storageChecking ? <div className="gr-loading-spinner" style={{width:20,height:20}}/> : <I n="plus" size={24} color="var(--gr-t3)"/>}
+          <span style={{fontSize:11,color:'var(--gr-t3)',marginTop:2}}>{storageChecking?'확인중':'추가'}</span>
+          <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple onChange={handleImages} style={{display:'none'}}/>
+        </div>
       </div>
       <div className="gr-pg-label">제목</div>
       <input className="gr-input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="오늘의 제목" autoFocus style={{marginBottom:12}}/>
