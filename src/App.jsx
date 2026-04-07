@@ -68,22 +68,24 @@ function AppInner() {
 
   // 초대링크 감지: ?join=CODE 또는 /@slug → localStorage에 보존
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const joinCode = params.get('join');
-    if (joinCode) {
-      localStorage.setItem('goroom_join_code', joinCode);
-      window.history.replaceState(null, '', window.location.pathname);
-    }
-    // /@slug 캘린더 공유 링크 감지
-    const slugMatch = window.location.pathname.match(/^\/@(.+)$/);
-    if (slugMatch) {
-      localStorage.setItem('goroom_join_slug', slugMatch[1]);
-    }
-    // OAuth 리다이렉트 후 원래 경로 복원용
-    const fullPath = window.location.pathname + window.location.search;
-    if (fullPath !== '/' && !window.location.hash.includes('access_token')) {
-      localStorage.setItem('goroom_redirect_path', fullPath);
-    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const joinCode = params.get('join');
+      if (joinCode) {
+        try { localStorage.setItem('goroom_join_code', joinCode); } catch(e) {}
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+      // /@slug 캘린더 공유 링크 감지
+      const slugMatch = window.location.pathname.match(/^\/@(.+)$/);
+      if (slugMatch) {
+        try { localStorage.setItem('goroom_join_slug', slugMatch[1]); } catch(e) {}
+      }
+      // OAuth 리다이렉트 후 원래 경로 복원용
+      const fullPath = window.location.pathname + window.location.search;
+      if (fullPath !== '/' && !window.location.hash.includes('access_token')) {
+        try { localStorage.setItem('goroom_redirect_path', fullPath); } catch(e) {}
+      }
+    } catch(e) { console.error('Init useEffect error:', e); }
   }, []);
 
   if (!authChecked) return (
@@ -115,7 +117,7 @@ function AppMain({ authUser, onLogout }){
   const [schDetail, setSchDetail] = useState(null);
   const [friendSchs, setFriendSchs] = useState({});  // { friendId: schedules[] }
   const [profilePopup, setProfilePopup] = useState(null); // {id,nickname,statusMsg,profileImg,profileBg}
-  const [lastReadAlarm, setLastReadAlarm] = useState(() => parseInt(localStorage.getItem('gr_last_read_alarm') || '0'));
+  const [lastReadAlarm, setLastReadAlarm] = useState(() => { try { return parseInt(localStorage.getItem('gr_last_read_alarm') || '0'); } catch(e) { return 0; } });
 
   // 알림 데이터 계산 (다른 사용자가 만든 최근 활동)
   const notifications = useMemo(() => {
@@ -359,19 +361,21 @@ function AppMain({ authUser, onLogout }){
         const params = new URLSearchParams(window.location.search);
         let joinCode = params.get('join');
         if (joinCode) window.history.replaceState(null, '', window.location.pathname);
-        else joinCode = localStorage.getItem('goroom_join_code');
-        localStorage.removeItem('goroom_join_code');
+        else try { joinCode = localStorage.getItem('goroom_join_code'); } catch(e) {}
+        try { localStorage.removeItem('goroom_join_code'); } catch(e) {}
 
         // 2) /@slug 확인
-        let joinSlug = localStorage.getItem('goroom_join_slug');
-        localStorage.removeItem('goroom_join_slug');
+        let joinSlug = null;
+        try { joinSlug = localStorage.getItem('goroom_join_slug'); } catch(e) {}
+        try { localStorage.removeItem('goroom_join_slug'); } catch(e) {}
         // 현재 URL이 /@slug인 경우도 확인
         const slugFromPath = window.location.pathname.match(/^\/@(.+)$/);
         if (slugFromPath) joinSlug = slugFromPath[1];
 
         // 3) 리다이렉트 경로 복원
-        const redirectPath = localStorage.getItem('goroom_redirect_path');
-        localStorage.removeItem('goroom_redirect_path');
+        let redirectPath = null;
+        try { redirectPath = localStorage.getItem('goroom_redirect_path'); } catch(e) {}
+        try { localStorage.removeItem('goroom_redirect_path'); } catch(e) {}
 
         let targetRoom = null;
 
@@ -1123,7 +1127,7 @@ function AppMain({ authUser, onLogout }){
         <div className="gr-more-item" onClick={()=>{navigate('/more/trash');}}><I n="trash" size={20}/><span>휴지통</span></div>
         <div className="gr-more-item" onClick={()=>{navigate('/more/settings');}}><I n="gear" size={20}/><span>설정</span></div>
       </div></>}
-      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{if(isWide)navigate('/profile');else navigate('/');}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{if(isWide){const myRoom=rooms.find(r=>r.isPersonal);navigate(myRoom?`/calendar/${myRoom.id}/cal`:'/calendar');}else navigate('/calendar');}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='alarm'?'on':''}`} onClick={()=>{const now=Date.now();setLastReadAlarm(now);localStorage.setItem('gr_last_read_alarm',String(now));navigate('/alarm');}}><div className="gr-btab-bell-wrap"><I n="bell" size={22}/>{unreadAlarmCount>0&&<span className="gr-btab-badge">{unreadAlarmCount>99?'99+':unreadAlarmCount}</span>}</div><span>알림</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{if(isWide)navigate('/more/info');else navigate('/more');}}><I n="more" size={22}/><span>더보기</span></button></div>
+      <div className="gr-btab"><button className={`gr-btab-btn ${tab==='friends'?'on':''}`} onClick={()=>{if(isWide)navigate('/profile');else navigate('/');}}><I n="user" size={22}/><span>친구</span></button><button className={`gr-btab-btn ${tab==='rooms'?'on':''}`} onClick={()=>{if(isWide){const myRoom=rooms.find(r=>r.isPersonal);navigate(myRoom?`/calendar/${myRoom.id}/cal`:'/calendar');}else navigate('/calendar');}}><I n="cal" size={22}/><span>캘린더</span></button><button className={`gr-btab-btn ${tab==='alarm'?'on':''}`} onClick={()=>{const now=Date.now();setLastReadAlarm(now);try{localStorage.setItem('gr_last_read_alarm',String(now));}catch(e){}navigate('/alarm');}}><div className="gr-btab-bell-wrap"><I n="bell" size={22}/>{unreadAlarmCount>0&&<span className="gr-btab-badge">{unreadAlarmCount>99?'99+':unreadAlarmCount}</span>}</div><span>알림</span></button><button className={`gr-btab-btn ${tab==='more'?'on':''}`} onClick={()=>{if(isWide)navigate('/more/info');else navigate('/more');}}><I n="more" size={22}/><span>더보기</span></button></div>
     </div>
   );
 

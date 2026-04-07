@@ -18,7 +18,7 @@ export default function LoginPage({ onLogin }) {
       const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
       const user = { id: data.user.id, email: data.user.email, nickname: data.user.user_metadata?.name || email.split('@')[0] };
-      localStorage.setItem('goroom_user_id', user.id);
+      try { localStorage.setItem('goroom_user_id', user.id); } catch(e) {}
       onLogin(user);
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -33,7 +33,7 @@ export default function LoginPage({ onLogin }) {
       if (err) throw err;
       if (data.session) {
         const user = { id: data.user.id, email: data.user.email, nickname };
-        localStorage.setItem('goroom_user_id', user.id);
+        try { localStorage.setItem('goroom_user_id', user.id); } catch(e) {}
         onLogin(user);
       } else {
         setError('가입 완료! 이메일 인증 후 로그인해주세요.');
