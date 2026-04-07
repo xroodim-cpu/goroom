@@ -1,25 +1,38 @@
-// Vercel Serverless Function: /@slug OG 메타태그
+// Vercel Serverless Function: /@slug 및 /calendar/:roomId OG 메타태그
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const SUPABASE_URL = 'https://dyotbojxtcqhcmrefofb.supabase.co/rest/v1';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5b3Rib2p4dGNxaGNtcmVmb2ZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MTU2NTIsImV4cCI6MjA5MDI5MTY1Mn0.dJp5-vqXoW_9s-Br2vyn8sx2fo2wDWpNWlr5tqgddqo';
 
+const apiFetch = (path) => fetch(`${SUPABASE_URL}${path}`, {
+  headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+}).then(r => r.json());
+
 export default async function handler(req, res) {
-  const { slug } = req.query;
-  if (!slug) return res.redirect(302, '/');
+  const { slug, roomId } = req.query;
+  if (!slug && !roomId) return res.redirect(302, '/');
 
   let title = '구롬 GoRoom';
   let description = '스케줄 · 가계부 · 메모';
   let image = 'https://goroom.kr/og-default.png';
-  const url = `https://goroom.kr/@${slug}`;
+  let url = 'https://goroom.kr';
 
   try {
-    const r = await fetch(`${SUPABASE_URL}/goroom_rooms?select=id,name,description,thumbnail_url&slug=eq.${slug}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    const rooms = await r.json();
-    const room = rooms?.[0];
+    let room = null;
+
+    if (slug) {
+      // /@slug로 접근
+      const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&slug=eq.${slug}`);
+      room = rooms?.[0];
+      url = `https://goroom.kr/@${slug}`;
+    } else if (roomId) {
+      // /calendar/:roomId로 접근
+      const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&id=eq.${roomId}`);
+      room = rooms?.[0];
+      // slug가 있으면 slug URL 사용, 없으면 calendar URL
+      url = room?.slug ? `https://goroom.kr/@${room.slug}` : `https://goroom.kr/calendar/${roomId}/cal`;
+    }
 
     if (room) {
       title = `고룸 - ${room.name} 캘린더`;
@@ -55,8 +68,9 @@ export default async function handler(req, res) {
     return res.status(200).send(html);
   } catch (e) {
     console.error('HTML read error:', e);
-    // Fallback: JavaScript redirect (카카오톡 WebView 등 meta refresh 미지원 대응)
-    return res.status(200).send(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">${ogTags}<title>${esc(title)}</title><script>window.location.replace('/@${esc(slug)}');</script></head><body><p style="text-align:center;padding:40px;font-family:sans-serif;color:#888">이동 중...</p></body></html>`);
+    // Fallback: JavaScript redirect
+    const redirectUrl = slug ? `/@${esc(slug)}` : `/calendar/${esc(roomId)}/cal`;
+    return res.status(200).send(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">${ogTags}<title>${esc(title)}</title><script>window.location.replace('${redirectUrl}');</script></head><body><p style="text-align:center;padding:40px;font-family:sans-serif;color:#888">이동 중...</p></body></html>`);
   }
 }
 

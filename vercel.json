@@ -9,6 +9,8 @@
   },
   "rewrites": [
     { "source": "/@:slug", "destination": "/api/og?slug=:slug" },
+    { "source": "/calendar/:roomId/:tab", "destination": "/api/og?roomId=:roomId" },
+    { "source": "/calendar/:roomId", "destination": "/api/og?roomId=:roomId" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
