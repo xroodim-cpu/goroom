@@ -1,3 +1,10 @@
 .vercel
 node_modules/
 dist/
+release/
+*.exe
+*.msi
+*.dmg
+out/
+.env
+.env.local
