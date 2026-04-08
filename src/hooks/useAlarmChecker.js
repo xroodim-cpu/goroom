@@ -47,16 +47,32 @@ export default function useAlarmChecker(rooms, userId) {
   }, []);
 
   useEffect(() => {
-    if (!rooms.length || Notification.permission !== 'granted') return;
-    if (localStorage.getItem('gr_noti_schedule') === 'false') return;
+    const notiEnabled = localStorage.getItem('gr_noti_schedule') !== 'false';
+    const permGranted = Notification.permission === 'granted';
+
+    if (!rooms.length || !permGranted || !notiEnabled) {
+      if (!rooms.length) console.log('[AlarmChecker] No rooms');
+      if (!permGranted) console.log('[AlarmChecker] Notification permission not granted:', Notification.permission);
+      if (!notiEnabled) console.log('[AlarmChecker] Schedule notification disabled');
+      return;
+    }
 
     const check = () => {
       const now = new Date();
+      let scheduleCount = 0;
+
       for (const room of rooms) {
         for (const sch of room.schedules || []) {
-          if (!sch.alarm?.before) continue;
+          scheduleCount++;
+          if (!sch.alarm?.before) {
+            continue;
+          }
+
           const offset = OFFSETS[sch.alarm.before];
-          if (!offset) continue;
+          if (!offset) {
+            console.warn('[AlarmChecker] Unknown alarm offset:', sch.alarm.before);
+            continue;
+          }
 
           const schTime = sch.repeat ? getNextOccurrence(sch, new Date(now.getTime() - offset)) : new Date(`${sch.date}T${sch.time || '00:00'}`);
           if (!schTime) continue;
@@ -68,11 +84,16 @@ export default function useAlarmChecker(rooms, userId) {
             firedRef.current.add(key);
             try { sessionStorage.setItem('gr_fired_alarms', JSON.stringify([...firedRef.current])); } catch {}
 
+            console.log('[AlarmChecker] 🔔 Alarm triggered:', sch.title, 'at', alarmTime);
             const label = LABELS[sch.alarm.before] || sch.alarm.before;
             const body = sch.alarm.message || `${label} — ${sch.date}${sch.time ? ' ' + sch.time : ''}`;
             showNotification(`🔔 ${sch.title}`, body, room.id);
           }
         }
+      }
+
+      if (scheduleCount > 0 && scheduleCount % 50 === 0) {
+        console.log('[AlarmChecker] Checked', scheduleCount, 'schedules at', now.toLocaleTimeString());
       }
     };
 

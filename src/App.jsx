@@ -119,36 +119,51 @@ function AppMain({ authUser, onLogout }){
   const [profilePopup, setProfilePopup] = useState(null); // {id,nickname,statusMsg,profileImg,profileBg}
   const [lastReadAlarm, setLastReadAlarm] = useState(() => { try { return parseInt(localStorage.getItem('gr_last_read_alarm') || '0'); } catch(e) { return 0; } });
 
-  // 알림 데이터 계산 (다른 사용자가 만든 최근 활동)
+  // 알림 데이터 계산 (다른 사용자가 만든 최근 활동 + 친구 추가)
   const notifications = useMemo(() => {
     const items = [];
     const now = Date.now();
     const weekAgo = now - 7 * 86400000;
-    rooms.forEach(room => {
-      (room.schedules || []).forEach(s => {
-        if (s.createdBy && s.createdBy !== userId && s.createdAt > weekAgo) {
-          items.push({ type: 'schedule', roomId: room.id, roomName: room.name, title: s.title, createdAt: s.createdAt, createdBy: s.createdBy });
+    const friendNotiEnabled = localStorage.getItem('gr_noti_friend') !== 'false';
+    const feedNotiEnabled = localStorage.getItem('gr_noti_feed') !== 'false';
+
+    // 친구 추가 알림 (친구 알림 설정이 활성화되었을 때)
+    if (friendNotiEnabled) {
+      (friends || []).forEach(f => {
+        if (f.createdAt && f.createdAt > weekAgo) {
+          items.push({ type: 'friend', id: f.id, roomId: null, roomName: null, title: `${f.nickname}님과 친구가 되었습니다`, createdAt: f.createdAt, createdBy: f.id });
         }
       });
-      (room.memos || []).forEach(m => {
-        if (m.createdBy && m.createdBy !== userId && m.createdAt > weekAgo) {
-          items.push({ type: 'memo', roomId: room.id, roomName: room.name, title: m.title, createdAt: m.createdAt, createdBy: m.createdBy });
-        }
+    }
+
+    // Room 활동 알림 (피드 알림 설정이 활성화되었을 때)
+    if (feedNotiEnabled) {
+      rooms.forEach(room => {
+        (room.schedules || []).forEach(s => {
+          if (s.createdBy && s.createdBy !== userId && s.createdAt > weekAgo) {
+            items.push({ type: 'schedule', roomId: room.id, roomName: room.name, title: s.title, createdAt: s.createdAt, createdBy: s.createdBy });
+          }
+        });
+        (room.memos || []).forEach(m => {
+          if (m.createdBy && m.createdBy !== userId && m.createdAt > weekAgo) {
+            items.push({ type: 'memo', roomId: room.id, roomName: room.name, title: m.title, createdAt: m.createdAt, createdBy: m.createdBy });
+          }
+        });
+        (room.todos || []).forEach(t => {
+          if (t.createdBy && t.createdBy !== userId && t.createdAt > weekAgo) {
+            items.push({ type: 'todo', roomId: room.id, roomName: room.name, title: t.text, createdAt: t.createdAt, createdBy: t.createdBy });
+          }
+        });
+        (room.diaries || []).forEach(d => {
+          if (d.createdBy && d.createdBy !== userId && d.createdAt > weekAgo) {
+            items.push({ type: 'diary', roomId: room.id, roomName: room.name, title: d.content?.slice(0,30) || '다이어리', createdAt: d.createdAt, createdBy: d.createdBy });
+          }
+        });
       });
-      (room.todos || []).forEach(t => {
-        if (t.createdBy && t.createdBy !== userId && t.createdAt > weekAgo) {
-          items.push({ type: 'todo', roomId: room.id, roomName: room.name, title: t.text, createdAt: t.createdAt, createdBy: t.createdBy });
-        }
-      });
-      (room.diaries || []).forEach(d => {
-        if (d.createdBy && d.createdBy !== userId && d.createdAt > weekAgo) {
-          items.push({ type: 'diary', roomId: room.id, roomName: room.name, title: d.content?.slice(0,30) || '다이어리', createdAt: d.createdAt, createdBy: d.createdBy });
-        }
-      });
-    });
+    }
     items.sort((a, b) => b.createdAt - a.createdAt);
     return items;
-  }, [rooms, userId]);
+  }, [rooms, userId, friends]);
 
   const unreadAlarmCount = useMemo(() => notifications.filter(n => n.createdAt > lastReadAlarm).length, [notifications, lastReadAlarm]);
 
@@ -245,9 +260,9 @@ function AppMain({ authUser, onLogout }){
         // 1차 병렬: 유저 + 친구 + 방목록 + 나를 추가한 사람
         const [userArr, friendRows, memberRows, addedMeRows] = await Promise.all([
           sbGet(`/goroom_users?select=*&id=eq.${userId}`),
-          sbGet(`/goroom_friends?select=*&user_id=eq.${userId}`),
+          sbGet(`/goroom_friends?select=*,created_at&user_id=eq.${userId}&order=created_at.desc`),
           sbGet(`/goroom_room_members?select=room_id,role&user_id=eq.${userId}`),
-          sbGet(`/goroom_friends?select=*&friend_id=eq.${userId}`),
+          sbGet(`/goroom_friends?select=*,created_at&friend_id=eq.${userId}&order=created_at.desc`),
         ]);
 
         // 유저 처리
@@ -283,7 +298,7 @@ function AppMain({ authUser, onLogout }){
         if (friendRows.length > 0) {
           const friendUsers = secondaryResults[0] || [];
           const fm = {}; friendUsers.forEach(u => { fm[u.id] = u; });
-          setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id }; }));
+          setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id, createdAt: new Date(fr.created_at||Date.now()).getTime() }; }));
         }
         // 친구추천 처리 (나를 추가했지만 내가 추가하지 않은 사람)
         const myFriendIds = new Set(friendRows.map(fr => fr.friend_id));
@@ -1106,15 +1121,16 @@ function AppMain({ authUser, onLogout }){
         {notifications.length===0?<div style={{padding:40,textAlign:'center',color:'var(--gr-t3)',fontSize:13}}>새로운 알림이 없습니다</div>
         :notifications.map((n,i)=>{
           const isUnread = n.createdAt > lastReadAlarm;
-          const typeLabel = {schedule:'일정',memo:'메모',todo:'할일',diary:'다이어리'}[n.type]||'';
+          const typeLabel = {schedule:'일정',memo:'메모',todo:'할일',diary:'다이어리',friend:'친구'}[n.type]||'';
           const timeAgo = (()=>{const d=Date.now()-n.createdAt;if(d<60000)return '방금';if(d<3600000)return Math.floor(d/60000)+'분 전';if(d<86400000)return Math.floor(d/3600000)+'시간 전';return Math.floor(d/86400000)+'일 전';})();
           const creator = (()=>{for(const f of friends){if(f.id===n.createdBy)return f;}return null;})();
           const creatorName = creator?.nickname || '멤버';
-          return <div key={`${n.type}-${n.createdAt}-${i}`} className={`gr-alarm-item ${isUnread?'unread':''}`} onClick={()=>navigate(`/calendar/${n.roomId}/cal`)}>
-            <div className="gr-alarm-icon"><I n={n.type==='schedule'?'cal':n.type==='memo'?'edit':n.type==='todo'?'check':'book'} size={18} color={isUnread?'var(--gr-acc)':'var(--gr-t3)'}/></div>
+          const isFriendNoti = n.type === 'friend';
+          return <div key={`${n.type}-${n.createdAt}-${i}`} className={`gr-alarm-item ${isUnread?'unread':''}`} onClick={()=>{if(isFriendNoti){openProfile(n.createdBy);}else{navigate(`/calendar/${n.roomId}/cal`);}}}>
+            <div className="gr-alarm-icon"><I n={n.type==='schedule'?'cal':n.type==='memo'?'edit':n.type==='todo'?'check':n.type==='friend'?'userPlus':'book'} size={18} color={isUnread?'var(--gr-acc)':'var(--gr-t3)'}/></div>
             <div className="gr-alarm-content">
-              <div className="gr-alarm-title"><strong>{creatorName}</strong>님이 <strong>{n.roomName}</strong>에 {typeLabel}을 추가했습니다</div>
-              <div className="gr-alarm-sub">{n.title}{n.title?' · ':''}{timeAgo}</div>
+              <div className="gr-alarm-title">{isFriendNoti?n.title:<><strong>{creatorName}</strong>님이 <strong>{n.roomName}</strong>에 {typeLabel}을 추가했습니다</>}</div>
+              <div className="gr-alarm-sub">{!isFriendNoti&&n.title}{!isFriendNoti&&n.title?' · ':''}{timeAgo}</div>
             </div>
           </div>;
         })}
