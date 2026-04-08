@@ -13,10 +13,15 @@ export default async function handler(req, res) {
   const { slug, roomId } = req.query;
   if (!slug && !roomId) return res.redirect(302, '/');
 
+  // 동적으로 도메인 설정
+  const host = req.headers.host || 'goroom.vercel.app';
+  const protocol = req.headers['x-forwarded-proto'] || 'https';
+  const baseUrl = `${protocol}://${host}`;
+
   let title = '구롬 GoRoom';
   let description = '스케줄 · 가계부 · 메모';
-  let image = 'https://goroom.kr/og-default.png';
-  let url = 'https://goroom.kr';
+  let image = `${baseUrl}/icon-192.png`;
+  let url = baseUrl;
 
   try {
     let room = null;
@@ -25,13 +30,13 @@ export default async function handler(req, res) {
       // /@slug로 접근
       const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&slug=eq.${slug}`);
       room = rooms?.[0];
-      url = `https://goroom.kr/@${slug}`;
+      url = `${baseUrl}/@${slug}`;
     } else if (roomId) {
       // /calendar/:roomId로 접근
       const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&id=eq.${roomId}`);
       room = rooms?.[0];
       // slug가 있으면 slug URL 사용, 없으면 calendar URL
-      url = room?.slug ? `https://goroom.kr/@${room.slug}` : `https://goroom.kr/calendar/${roomId}/cal`;
+      url = room?.slug ? `${baseUrl}/@${room.slug}` : `${baseUrl}/calendar/${roomId}/cal`;
     }
 
     if (room) {
@@ -40,7 +45,13 @@ export default async function handler(req, res) {
       if (room.thumbnail_url) image = room.thumbnail_url;
     }
   } catch (e) {
-    console.error('OG fetch error:', e);
+    console.error('[OG] Supabase fetch error:', {
+      roomId,
+      slug,
+      error: e.message,
+      stack: e.stack
+    });
+    // 에러 발생해도 기본 OG 태그는 반환
   }
 
   const ogTags = `
