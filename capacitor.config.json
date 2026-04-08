@@ -1,8 +1,17 @@
 {
   "appId": "com.goroom.app",
-  "appName": "구롬",
+  "appName": "고룸",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#ffffff"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon_config_sample",
+      "iconColor": "#cc222c"
+    }
   }
 }

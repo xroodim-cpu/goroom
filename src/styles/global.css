@@ -307,4 +307,126 @@
 .gr-storage-pay-btn{width:100%;padding:14px;border:none;border-radius:12px;background:#0064FF;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff);transition:background .2s}
 .gr-storage-pay-btn:hover{background:#0052D4}
 .gr-storage-pay-btn:disabled{background:#ccc;cursor:not-allowed}
+
+/* Mobile Optimizations */
+@supports(padding: max(0px)) {
+  .gr-root {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Mobile Touch Targets */
+@media(max-width:480px) {
+  .gr-btab-btn {
+    min-height: 44px;
+    padding: 10px 0 12px;
+  }
+
+  .gr-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+
+  .gr-tab-top-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+
+  .gr-input {
+    min-height: 44px;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+
+  .gr-btn-primary {
+    min-height: 44px;
+    padding: 14px;
+    font-size: 16px;
+  }
+
+  .gr-fab {
+    width: 56px;
+    height: 56px;
+  }
+
+  .gr-profile-top-btn,
+  .gr-profile-top-btn-s {
+    min-height: 36px;
+  }
+
+  .gr-alarm-item,
+  .gr-friend-row,
+  .gr-room-row {
+    padding: 16px 16px;
+    min-height: 56px;
+  }
+
+  .gr-suggest-add-btn {
+    min-height: 32px;
+    padding: 6px 14px;
+  }
+
+  /* Remove hover effects on touch devices */
+  .gr-friend-row:hover {
+    background: inherit;
+  }
+}
+
+/* Landscape orientation */
+@media(max-width:480px) and (orientation:landscape) {
+  .gr-profile-bg {
+    max-height: 280px;
+  }
+
+  .gr-cal-cell {
+    min-height: 32px;
+  }
+}
+
+/* Improved spacing for small screens */
+@media(max-width:480px) {
+  .gr-pg-body {
+    padding: 12px 16px;
+  }
+
+  .gr-header {
+    padding: 12px 12px;
+    gap: 8px;
+  }
+
+  .gr-room-top {
+    padding: 12px 12px;
+    gap: 8px;
+  }
+
+  /* Better form spacing */
+  .gr-login-card {
+    padding: 24px 20px;
+    border-radius: 16px;
+  }
+
+  .gr-input {
+    border-radius: 8px;
+  }
+
+  .gr-btn-primary {
+    border-radius: 8px;
+  }
+
+  /* Improved modal for mobile */
+  .gr-storage-modal {
+    border-radius: 16px;
+    padding: 20px 16px 16px;
+    margin: 16px;
+  }
+
+  .gr-modal-overlay {
+    padding: 16px;
+  }
+}
 .gr-storage-modal-note{text-align:center;font-size:11px;color:var(--gr-t3);margin-top:12px;line-height:1.4}

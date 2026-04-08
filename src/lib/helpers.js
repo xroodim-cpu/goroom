@@ -78,3 +78,70 @@ export function fmtSize(bytes) {
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
+
+/** 모바일 플랫폼 감지 */
+export function isMobile() {
+  try {
+    const { Capacitor } = window;
+    return Capacitor && Capacitor.isNativePlatform?.();
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 안드로이드 플랫폼 확인 */
+export function isAndroid() {
+  try {
+    const { Capacitor } = window;
+    return Capacitor?.getPlatform?.() === 'android';
+  } catch (e) {
+    return false;
+  }
+}
+
+/** iOS 플랫폼 확인 */
+export function isIOS() {
+  try {
+    const { Capacitor } = window;
+    return Capacitor?.getPlatform?.() === 'ios';
+  } catch (e) {
+    return false;
+  }
+}
+
+/** 카메라 이미지 선택 (모바일 및 웹 지원) */
+export async function selectImage() {
+  try {
+    const { Capacitor } = window;
+    if (Capacitor && Capacitor.isNativePlatform?.()) {
+      const { Camera } = await import('@capacitor/camera');
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: 'uri',
+        source: 'prompt',
+      });
+      if (photo?.webPath) {
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const file = new File([blob], 'image.jpg', { type: blob.type });
+        return file;
+      }
+      return null;
+    } else {
+      // 웹 브라우저: 표준 파일 입력
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = () => {
+          resolve(input.files?.[0] || null);
+        };
+        input.click();
+      });
+    }
+  } catch (error) {
+    console.error('[selectImage] Error:', error);
+    return null;
+  }
+}

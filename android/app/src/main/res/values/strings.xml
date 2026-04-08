@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">구롬</string>
-    <string name="title_activity_main">구롬</string>
+    <string name="app_name">고룸</string>
+    <string name="title_activity_main">고룸</string>
     <string name="package_name">com.goroom.app</string>
     <string name="custom_url_scheme">com.goroom.app</string>
     <string name="widget_description">오늘의 일정을 홈 화면에서 확인하세요</string>

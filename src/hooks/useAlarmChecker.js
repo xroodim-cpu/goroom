@@ -26,7 +26,28 @@ function getNextOccurrence(sch, now) {
   return null;
 }
 
-function showNotification(title, body, roomId) {
+async function showNotification(title, body, roomId) {
+  // 모바일: Capacitor LocalNotifications 사용
+  try {
+    const { Capacitor } = window;
+    if (Capacitor && Capacitor.isNativePlatform?.()) {
+      const { LocalNotifications } = await import('@capacitor/local-notifications');
+      await LocalNotifications.schedule({
+        notifications: [{
+          title: title,
+          body: body,
+          id: Math.floor(Math.random() * 100000),
+          smallIcon: 'ic_stat_icon_config_sample',
+          largeBody: body,
+        }],
+      });
+      return;
+    }
+  } catch (e) {
+    // 모바일 플러그인 로드 실패, 웹 방식으로 폴백
+  }
+
+  // 웹: ServiceWorker 또는 브라우저 알림 사용
   const opts = { body, icon: '/icon-192.png', data: { url: `/calendar/${roomId}/cal` } };
   if (navigator.serviceWorker?.controller) {
     navigator.serviceWorker.ready.then(reg => reg.showNotification(title, opts)).catch(() => {});
@@ -44,6 +65,22 @@ export default function useAlarmChecker(rooms, userId) {
       const saved = sessionStorage.getItem('gr_fired_alarms');
       if (saved) firedRef.current = new Set(JSON.parse(saved));
     } catch {}
+
+    // 모바일: 알림 권한 요청
+    (async () => {
+      try {
+        const { Capacitor } = window;
+        if (Capacitor && Capacitor.isNativePlatform?.()) {
+          const { LocalNotifications } = await import('@capacitor/local-notifications');
+          const perm = await LocalNotifications.checkPermissions();
+          if (perm?.display !== 'granted') {
+            await LocalNotifications.requestPermissions();
+          }
+        }
+      } catch (e) {
+        console.log('[useAlarmChecker] Mobile notification init failed:', e.message);
+      }
+    })();
   }, []);
 
   useEffect(() => {
