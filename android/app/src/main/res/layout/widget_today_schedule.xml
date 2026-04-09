@@ -18,10 +18,10 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="오늘의 일정"
+            android:text="고룸 · 오늘"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:textColor="#333333" />
+            android:textColor="#cc222c" />
 
         <TextView
             android:id="@+id/widget_date"
@@ -51,7 +51,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:gravity="center"
-        android:text="오늘 일정이 없습니다"
+        android:text="오늘은 일정이 없어요 ☁️"
         android:textSize="13sp"
         android:textColor="#AAAAAA"
         android:visibility="gone" />

@@ -730,6 +730,7 @@ function AppMain({ authUser, onLogout }){
     };
     try {
       await sbPost('goroom_schedules', row);
+      try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
     } catch (e) { console.error('saveSchedule error:', e); }
 
     const hasNewFiles = pendingImages.some(p => p.file || p.dataUrl);
@@ -786,6 +787,7 @@ function AppMain({ authUser, onLogout }){
     }
     try {
       await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
+      try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
     } catch (e) { console.error('updateSchedule error:', e); }
 
     if (hasNewFiles.length > 0 && !isUploading) {
@@ -821,6 +823,7 @@ function AppMain({ authUser, onLogout }){
         });
       }
       await sbDelete(`/goroom_schedules?id=eq.${schId}`);
+      try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
     } catch (e) { console.error('deleteSchedule error:', e); }
   };
 
