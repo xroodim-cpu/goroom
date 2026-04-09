@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, Notification } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
@@ -81,6 +81,19 @@ function createTray() {
 /* ── IPC ── */
 ipcMain.handle('close-widget', () => { if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.close(); });
 ipcMain.handle('open-main', () => createMainWindow());
+
+// 네이티브 알림 표시 — 전 플랫폼 통합 알림 (src/lib/notify.js에서 호출)
+ipcMain.handle('notify:show', (_evt, payload) => {
+  try {
+    if (!Notification.isSupported()) return false;
+    const title = (payload && payload.title) || '고룸';
+    const body = (payload && payload.body) || '';
+    const n = new Notification({ title, body, icon: path.join(__dirname, 'icon.png') });
+    n.on('click', () => { try { createMainWindow(); } catch {} });
+    n.show();
+    return true;
+  } catch (e) { console.error('notify:show failed', e); return false; }
+});
 
 /* ── App Lifecycle ── */
 app.whenReady().then(() => {

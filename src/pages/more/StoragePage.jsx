@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import I from '../../components/shared/Icon';
 import { listFolderSize } from '../../wasabi';
 import { fmtSize } from '../../lib/helpers';
-import { isNativeAndroid, initBilling, purchaseSubscription, getActiveSubscription, openSubscriptionManagement } from '../../lib/billing';
+import { PLANS, startSubscription, isNativeAndroid, openExternalStoragePage } from '../../lib/billing';
 
 const FREE_LIMIT = 1024 * 1024 * 1024; // 1GB 기본 무료
 
@@ -12,12 +12,6 @@ const PLAN_LABELS = {
   [100 * 1024 * 1024 * 1024]: '100 GB',
 };
 
-const PLANS = [
-  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3900, label: '3,900' },
-  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 7900, label: '7,900', popular: true },
-  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 12900, label: '12,900' },
-];
-
 export default function StoragePage({ goBack, rooms, userId, me }) {
   const ownerRooms = rooms.filter(r => r.members.find(m => m.id === userId && m.role === 'owner'));
   const [storageData, setStorageData] = useState([]);
@@ -25,6 +19,7 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
   const [totalSize, setTotalSize] = useState(0);
   const [selectedPlan, setSelectedPlan] = useState('plan_50g');
   const [processing, setProcessing] = useState(false);
+  const [androidRedirecting, setAndroidRedirecting] = useState(false);
 
   const isAdmin = !!me?.isAdmin;
   const storageLimit = isAdmin ? Infinity : (me?.storageLimit || FREE_LIMIT);
@@ -33,6 +28,17 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
   const isOver = !isAdmin && totalSize >= storageLimit;
 
   useEffect(() => {
+    // Netflix 방식: Android 앱에서는 용량/결제 UI 전체를 외부 브라우저로 넘긴다.
+    // Google Play 정책 리스크 제로 + 사용자 경험 자연스러움.
+    if (isNativeAndroid()) {
+      setAndroidRedirecting(true);
+      (async () => {
+        await openExternalStoragePage({ userId });
+        // 외부 브라우저가 뜨면 앱에서는 뒤로 빠진다.
+        setTimeout(() => { try { goBack && goBack(); } catch {} }, 300);
+      })();
+      return;
+    }
     (async () => {
       const results = [];
       for (const room of ownerRooms) {
@@ -51,51 +57,16 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
 
   const pct = isAdmin ? 0 : Math.min((totalSize / storageLimit) * 100, 100);
 
-  const isAndroid = isNativeAndroid();
-
-  useEffect(() => {
-    if (isAndroid) initBilling(userId).catch(console.error);
-  }, [userId]);
-
   const handlePayment = async () => {
     const plan = PLANS.find(p => p.id === selectedPlan);
     if (!plan || processing) return;
     setProcessing(true);
     try {
-      if (isAndroid) {
-        await purchaseSubscription(plan.id);
-      } else {
-        if (!window.TossPayments) {
-          const script = document.createElement('script');
-          script.src = 'https://js.tosspayments.com/v2/standard';
-          script.onload = () => initTossPayment(plan);
-          document.head.appendChild(script);
-        } else {
-          await initTossPayment(plan);
-        }
-      }
+      await startSubscription({ planId: plan.id, userId });
     } catch (e) {
       console.error('Payment error:', e);
       alert('결제 초기화에 실패했습니다. 다시 시도해주세요.');
     } finally {
-      setProcessing(false);
-    }
-  };
-
-  const initTossPayment = async (plan) => {
-    try {
-      const tossPayments = TossPayments('live_ck_kZLKGPx4M3MYMxPPy6eVBaWypv1o');
-      const payment = tossPayments.payment({ customerKey: userId });
-      await payment.requestBillingAuth('CARD', {
-        amount: { currency: 'KRW', value: plan.price },
-        orderId: `storage_${userId}_${Date.now()}`,
-        orderName: `고룸 용량 추가 ${plan.name}/월`,
-        customerEmail: '',
-        successUrl: `${window.location.origin}/payment/success?plan=${plan.id}&userId=${userId}`,
-        failUrl: `${window.location.origin}/payment/fail`,
-      });
-    } catch (e) {
-      console.error('TossPayments error:', e);
       setProcessing(false);
     }
   };
@@ -108,7 +79,12 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
         <div style={{ width: 28 }}/>
       </div>
       <div className="gr-pg-body">
-        {loading ? (
+        {androidRedirecting ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--gr-t3)' }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--gr-text)', marginBottom: 8 }}>웹 브라우저로 이동 중…</div>
+            <div style={{ fontSize: 12 }}>용량 관리/결제는 브라우저에서 안전하게 진행돼요</div>
+          </div>
+        ) : loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--gr-t3)' }}>용량 계산 중...</div>
         ) : (
           <>
@@ -171,7 +147,7 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
                     ))}
                   </div>
                   <button className="gr-storage-pay-btn" style={{width:'100%'}} onClick={handlePayment} disabled={processing}>
-                    {processing ? '결제 준비 중...' : isAndroid ? 'Google Play로 구독하기' : '구독하기'}
+                    {processing ? '결제 준비 중...' : '구독하기'}
                   </button>
                   <div style={{textAlign:'center',fontSize:11,color:'var(--gr-t3)',marginTop:6}}>정기결제는 매월 자동 갱신되며, 언제든 해지 가능</div>
                 </div>
@@ -179,12 +155,7 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
 
               {isPaid && (
                 <div className="gr-storage-info-row" style={{marginTop:8}}>
-                  <span style={{fontSize:11,color:'var(--gr-t3)'}}>정기결제 중 · 해지는 설정에서 가능</span>
-                  {isAndroid && (
-                    <button onClick={openSubscriptionManagement} style={{fontSize:11,color:'var(--gr-acc)',background:'none',border:'none',cursor:'pointer',padding:0}}>
-                      구독 관리
-                    </button>
-                  )}
+                  <span style={{fontSize:11,color:'var(--gr-t3)'}}>정기결제 중 · 해지는 고객센터에서 가능</span>
                 </div>
               )}
             </div>

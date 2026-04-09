@@ -28,6 +28,7 @@ import NotificationSettings from './pages/more/NotificationSettings';
 import AppSettings from './pages/more/AppSettings';
 import TrashPage from './pages/more/Trash';
 import StoragePage from './pages/more/StoragePage';
+import BillingStart from './pages/billing/BillingStart';
 import CalRoom from './pages/calendar/CalRoom';
 import AddRoomPage from './pages/calendar/AddRoom';
 import ScheduleForm from './pages/calendar/ScheduleForm';
@@ -90,6 +91,34 @@ function AppInner() {
         try { localStorage.setItem('goroom_redirect_path', fullPath); } catch(e) {}
       }
     } catch(e) { console.error('Init useEffect error:', e); }
+  }, []);
+
+  // Capacitor Deep Link 리스너: 외부 브라우저 결제 완료 후 앱 복귀 처리
+  // Android 앱에서만 등록되며, goroom://payment/success 또는 https://goroom.kr/payment/success 를 수신
+  useEffect(() => {
+    let cleanup = null;
+    (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.getPlatform() !== 'android') return;
+        const { App: CapApp } = await import('@capacitor/app');
+        const handle = await CapApp.addListener('appUrlOpen', ({ url }) => {
+          try {
+            // url 예: goroom://payment/success?plan=plan_20g 또는 https://goroom.kr/payment/success?...
+            const parsed = new URL(url);
+            const pathname = parsed.pathname || '/';
+            const search = parsed.search || '';
+            if (pathname.startsWith('/payment/success') || pathname.startsWith('/payment/fail')) {
+              window.location.replace(pathname + search);
+            }
+          } catch (e) { console.warn('appUrlOpen parse failed', e); }
+        });
+        cleanup = () => { try { handle.remove(); } catch {} };
+      } catch (e) {
+        // Capacitor가 없는 환경(웹/Electron)은 조용히 무시
+      }
+    })();
+    return () => { if (cleanup) cleanup(); };
   }, []);
 
   if (!authChecked) return (
@@ -231,6 +260,7 @@ function AppMain({ authUser, onLogout }){
     if (path === '/alarm') return { page: 'alarm-list' };
     if (path === '/payment/success') return { page: 'payment-success' };
     if (path === '/payment/fail') return { page: 'payment-fail' };
+    if (path === '/billing/start') return { page: 'billing-start' };
     // /@slug 캘린더 공유 링크
     const slugMatch = path.match(/^\/@(.+)$/);
     if (slugMatch) return { page: 'join-slug', slug: slugMatch[1] };
@@ -476,20 +506,38 @@ function AppMain({ authUser, onLogout }){
     })();
   }, [loading]);
 
-  // 결제 성공 콜백 처리
+  // 결제 성공 콜백 처리 (Toss 웹결제 후 redirect)
   useEffect(() => {
     if (loading || page !== 'payment-success') return;
     const params = new URLSearchParams(window.location.search);
     const planId = params.get('plan');
+    const targetUserId = params.get('userId') || userId;
     if (!planId) { navigate('/'); return; }
     const PLANS_MAP = { plan_20g: 20*1024*1024*1024, plan_50g: 50*1024*1024*1024, plan_100g: 100*1024*1024*1024 };
     const newLimit = PLANS_MAP[planId];
-    if (!newLimit) { navigate('/'); return; }
+    if (!newLimit || !targetUserId) { navigate('/'); return; }
     (async () => {
       try {
-        await sbPatch(`goroom_users?id=eq.${userId}`, { storage_limit: newLimit });
-        setMe(prev => ({ ...prev, storageLimit: newLimit }));
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await sbPatch(`goroom_users?id=eq.${targetUserId}`, {
+          storage_limit: newLimit,
+          subscription_provider: 'toss',
+          subscription_status: 'active',
+          subscription_expires_at: expiresAt,
+        });
+        if (targetUserId === userId) {
+          setMe(prev => ({ ...prev, storageLimit: newLimit }));
+        }
       } catch (e) { console.error('Storage upgrade error:', e); }
+
+      // Android 앱에서 외부 브라우저로 결제한 경우 딥링크로 앱 복귀 시도
+      try {
+        const fromApp = new URLSearchParams(window.location.search).get('from') === 'app';
+        if (fromApp) {
+          setTimeout(() => { window.location.href = `goroom://payment/success?plan=${planId}`; }, 400);
+          return;
+        }
+      } catch {}
       navigate('/');
     })();
   }, [loading, page]);
@@ -998,6 +1046,7 @@ function AppMain({ authUser, onLogout }){
     /* 결제 처리 */
     if(page==='payment-success') return <div className="gr-panel" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:16}}><div className="gr-loading-spinner"/><div style={{fontSize:14,color:'var(--gr-t3)'}}>결제 처리 중...</div></div>;
     if(page==='payment-fail') return <div className="gr-panel" style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:16}}><div style={{fontSize:48}}>😞</div><div style={{fontSize:16,fontWeight:700}}>결제가 취소되었습니다</div><div style={{fontSize:13,color:'var(--gr-t3)'}}>다시 시도하시려면 아래 버튼을 눌러주세요</div><button className="gr-save-btn" style={{marginTop:8,width:'auto',padding:'10px 32px'}} onClick={()=>navigate('/')}>돌아가기</button></div>;
+    if(page==='billing-start') return <div className="gr-panel"><BillingStart /></div>;
 
     /* 스케줄 수정 */
     if(page==='sch-edit' && schDetail){

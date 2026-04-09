@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /payment/
+Disallow: /billing/
+
+Sitemap: https://goroom.kr/sitemap.xml
