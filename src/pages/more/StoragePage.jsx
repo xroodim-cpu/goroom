@@ -88,7 +88,7 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
       await payment.requestBillingAuth('CARD', {
         amount: { currency: 'KRW', value: plan.price },
         orderId: `storage_${userId}_${Date.now()}`,
-        orderName: `구롬 용량 추가 ${plan.name}/월`,
+        orderName: `고룸 용량 추가 ${plan.name}/월`,
         customerEmail: '',
         successUrl: `${window.location.origin}/payment/success?plan=${plan.id}&userId=${userId}`,
         failUrl: `${window.location.origin}/payment/fail`,

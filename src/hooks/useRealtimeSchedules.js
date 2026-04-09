@@ -53,7 +53,7 @@ export default function useRealtimeSchedules(rooms, userId, updateRoom) {
         const notiEnabled = localStorage.getItem('gr_noti_schedule') !== 'false';
         if (notiEnabled && Notification.permission === 'granted') {
           const room = rooms.find(r => r.id === row.room_id);
-          showNotification(room?.name || '구롬', `새 스케줄: ${row.title}`);
+          showNotification(room?.name || '고룸', `새 스케줄: ${row.title}`);
         }
       })
       .subscribe();

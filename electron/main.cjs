@@ -13,7 +13,7 @@ function createMainWindow() {
 
   mainWindow = new BrowserWindow({
     width: 1200, height: 800,
-    title: '구롬 (GoRoom)',
+    title: '고룸 (GoRoom)',
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: { nodeIntegration: false, contextIsolation: true, preload: path.join(__dirname, 'preload.cjs') },
   });
@@ -62,10 +62,10 @@ function createTray() {
   catch { icon = nativeImage.createEmpty(); }
 
   tray = new Tray(icon);
-  tray.setToolTip('구롬 (GoRoom)');
+  tray.setToolTip('고룸 (GoRoom)');
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: '구롬 열기', click: createMainWindow },
+    { label: '고룸 열기', click: createMainWindow },
     { label: '오늘의 일정 위젯', click: toggleWidget },
     { type: 'separator' },
     { label: '시작 시 자동실행', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,

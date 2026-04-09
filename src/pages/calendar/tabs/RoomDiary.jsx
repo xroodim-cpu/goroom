@@ -43,8 +43,8 @@ export default function RoomDiary({diaries,schedules,isMulti,getName,getProfile,
   const share=(item,e)=>{
     e.stopPropagation();
     const link = `${window.location.origin}/calendar/${room.id}/cal`;
-    const text = `${item.title||room.name||'구롬'}\n${link}`;
-    if(navigator.share) navigator.share({title:item.title||room.name||'구롬',text,url:link}).catch(()=>{});
+    const text = `${item.title||room.name||'고룸'}\n${link}`;
+    if(navigator.share) navigator.share({title:item.title||room.name||'고룸',text,url:link}).catch(()=>{});
     else {navigator.clipboard?.writeText(link);alert('링크가 복사되었습니다!');}
   };
 
