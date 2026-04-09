@@ -14,8 +14,15 @@ export function isNativeAndroid() {
 let storeReady = false;
 let storeInstance = null;
 
+let currentUserId = null;
+
+export function setBillingUserId(userId) {
+  currentUserId = userId;
+}
+
 // cordova-plugin-purchase 초기화
-export async function initBilling() {
+export async function initBilling(userId) {
+  if (userId) currentUserId = userId;
   if (!isNativeAndroid() || storeReady) return;
 
   const { store, ProductType, Platform } = await import('cordova-plugin-purchase');
@@ -36,7 +43,7 @@ export async function initBilling() {
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/verify-google-subscription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receipt }),
+        body: JSON.stringify({ receipt, userId: currentUserId }),
       });
       const result = await resp.json();
       callback(result.ok, result);

@@ -33,8 +33,10 @@ export function invalidateStorageCache() {
   _cacheTime = 0;
 }
 
-/** 유저의 storage_limit 조회 */
+/** 유저의 storage_limit 조회 (관리자는 무제한) */
 export async function getUserStorageLimit(userId) {
-  const arr = await sbGet(`/goroom_users?select=storage_limit&id=eq.${userId}`);
-  return arr?.[0]?.storage_limit || 1073741824; // 기본 1GB
+  const arr = await sbGet(`/goroom_users?select=storage_limit,is_admin&id=eq.${userId}`);
+  const row = arr?.[0];
+  if (row?.is_admin) return Infinity; // 관리자는 용량 무제한
+  return row?.storage_limit || 1073741824; // 기본 1GB
 }

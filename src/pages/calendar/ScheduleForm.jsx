@@ -47,6 +47,8 @@ export default function ScheduleForm({goBack,room,updateRoom,selDate,sb,saveSche
   const [storageChecking, setStorageChecking] = useState(false);
   const handleAddClick = async () => {
     if (storageChecking) return;
+    // 관리자는 용량 체크 생략 (무제한)
+    if (me?.isAdmin) { fileInputRef.current?.click(); return; }
     setStorageChecking(true);
     try {
       const used = await getUserStorageUsage(userId, rooms||[]);

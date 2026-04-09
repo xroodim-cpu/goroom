@@ -26,10 +26,11 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
   const [selectedPlan, setSelectedPlan] = useState('plan_50g');
   const [processing, setProcessing] = useState(false);
 
-  const storageLimit = me?.storageLimit || FREE_LIMIT;
-  const planLabel = PLAN_LABELS[storageLimit] || fmtSize(storageLimit);
-  const isPaid = storageLimit > FREE_LIMIT;
-  const isOver = totalSize >= storageLimit;
+  const isAdmin = !!me?.isAdmin;
+  const storageLimit = isAdmin ? Infinity : (me?.storageLimit || FREE_LIMIT);
+  const planLabel = isAdmin ? '무제한' : (PLAN_LABELS[storageLimit] || fmtSize(storageLimit));
+  const isPaid = !isAdmin && storageLimit > FREE_LIMIT;
+  const isOver = !isAdmin && totalSize >= storageLimit;
 
   useEffect(() => {
     (async () => {
@@ -48,13 +49,13 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
     })();
   }, []);
 
-  const pct = Math.min((totalSize / storageLimit) * 100, 100);
+  const pct = isAdmin ? 0 : Math.min((totalSize / storageLimit) * 100, 100);
 
   const isAndroid = isNativeAndroid();
 
   useEffect(() => {
-    if (isAndroid) initBilling().catch(console.error);
-  }, []);
+    if (isAndroid) initBilling(userId).catch(console.error);
+  }, [userId]);
 
   const handlePayment = async () => {
     const plan = PLANS.find(p => p.id === selectedPlan);
@@ -121,10 +122,14 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
                 <span style={{ color: isOver ? '#F04452' : undefined }}>{fmtSize(totalSize)}</span>
                 {' '}<span className="gr-storage-total-limit">/ {planLabel}</span>
               </div>
-              <div className="gr-storage-bar">
-                <div className="gr-storage-fill" style={{ width: `${pct}%`, background: pct >= 90 ? '#F04452' : 'var(--gr-acc)' }}/>
-              </div>
-              <div className="gr-storage-pct" style={{ color: isOver ? '#F04452' : undefined }}>{pct.toFixed(1)}% 사용</div>
+              {!isAdmin && (
+                <>
+                  <div className="gr-storage-bar">
+                    <div className="gr-storage-fill" style={{ width: `${pct}%`, background: pct >= 90 ? '#F04452' : 'var(--gr-acc)' }}/>
+                  </div>
+                  <div className="gr-storage-pct" style={{ color: isOver ? '#F04452' : undefined }}>{pct.toFixed(1)}% 사용</div>
+                </>
+              )}
             </div>
 
             {/* 요금제 정보 */}
@@ -132,17 +137,17 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
               <div className="gr-storage-info-title">현재 요금제</div>
               <div className="gr-storage-info-row">
                 <span>요금제</span>
-                <span style={{fontWeight:600}}>{isPaid ? `${planLabel} 구독 중` : '무료 (1 GB)'}</span>
+                <span style={{fontWeight:600}}>{isAdmin ? '관리자 (무제한)' : isPaid ? `${planLabel} 구독 중` : '무료 (1 GB)'}</span>
               </div>
               <div className="gr-storage-info-row">
                 <span>사용 가능</span>
                 <span style={{ color: isOver ? '#F04452' : undefined, fontWeight: isOver ? 600 : 400 }}>
-                  {isOver ? '용량 초과' : `${fmtSize(Math.max(0, storageLimit - totalSize))} 남음`}
+                  {isAdmin ? '무제한' : isOver ? '용량 초과' : `${fmtSize(Math.max(0, storageLimit - totalSize))} 남음`}
                 </span>
               </div>
 
               {/* 무료 사용자: 인라인 요금제 선택 */}
-              {!isPaid && (
+              {!isPaid && !isAdmin && (
                 <div style={{marginTop:16}}>
                   <div style={{display:'flex',gap:8,marginBottom:12}}>
                     {PLANS.map(plan => (
@@ -190,16 +195,18 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
               <div style={{ textAlign: 'center', padding: 20, color: 'var(--gr-t3)', fontSize: 14 }}>방장인 캘린더가 없습니다</div>
             ) : (
               storageData.sort((a, b) => b.size - a.size).map(r => {
-                const roomPct = storageLimit > 0 ? (r.size / storageLimit) * 100 : 0;
+                const roomPct = isAdmin ? 0 : (storageLimit > 0 ? (r.size / storageLimit) * 100 : 0);
                 return (
                   <div key={r.roomId} className="gr-storage-room">
                     <div className="gr-storage-room-info">
                       <div className="gr-storage-room-name">{r.roomName}</div>
                       <div className="gr-storage-room-meta">{r.fileCount}개 파일 · {fmtSize(r.size)}</div>
                     </div>
-                    <div className="gr-storage-room-bar">
-                      <div className="gr-storage-room-fill" style={{ width: `${Math.min(roomPct, 100)}%` }}/>
-                    </div>
+                    {!isAdmin && (
+                      <div className="gr-storage-room-bar">
+                        <div className="gr-storage-room-fill" style={{ width: `${Math.min(roomPct, 100)}%` }}/>
+                      </div>
+                    )}
                   </div>
                 );
               })

@@ -15,8 +15,8 @@ export default function StorageLimitModal({ onClose, usedSize, storageLimit, use
   const isAndroid = isNativeAndroid();
 
   useEffect(() => {
-    if (isAndroid) initBilling().catch(console.error);
-  }, []);
+    if (isAndroid) initBilling(userId).catch(console.error);
+  }, [userId]);
 
   const handlePayment = async () => {
     const plan = PLANS.find(p => p.id === selected);

@@ -121,7 +121,7 @@ function AppMain({ authUser, onLogout }){
 
   const userId = useMemo(() => getUserId(), []);
 
-  const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:'',storageLimit:1073741824});
+  const [me, setMe] = useState({id:userId,nickname:'나',statusMsg:'',linkCode:'',bio:'',profileImg:null,profileBg:null,birthday:'',storageLimit:1073741824,isAdmin:false});
   const [friends, setFriends] = useState([]);
   const [friendSuggestions, setFriendSuggestions] = useState([]); // 나를 추가한 사람들
   const [rooms, setRooms] = useState([]);
@@ -281,7 +281,8 @@ function AppMain({ authUser, onLogout }){
         // 유저 처리
         if (userArr.length > 0) {
           const eu = userArr[0];
-          setMe({ id: eu.id, nickname: eu.nickname||'나', statusMsg: eu.status_msg||'', linkCode: eu.link_code||'', bio: '', profileImg: eu.profile_img||null, profileBg: eu.profile_bg||null, birthday: eu.birthday||'', storageLimit: eu.storage_limit||1073741824 });
+          const isAdmin = !!eu.is_admin;
+          setMe({ id: eu.id, nickname: eu.nickname||'나', statusMsg: eu.status_msg||'', linkCode: eu.link_code||'', bio: '', profileImg: eu.profile_img||null, profileBg: eu.profile_bg||null, birthday: eu.birthday||'', storageLimit: isAdmin ? Infinity : (eu.storage_limit||1073741824), isAdmin });
         } else {
           const linkCode = shortId();
           await sbPost('goroom_users', { id: userId, nickname: '나', status_msg: '', profile_img: null, profile_bg: null, link_code: linkCode, birthday: '' });
@@ -307,6 +308,18 @@ function AppMain({ authUser, onLogout }){
           );
         }
         const secondaryResults = await Promise.all(secondaryQueries);
+        // 모든 방 멤버의 user 정보 fetch (닉네임/프로필 이미지 표시용)
+        let memberUsersMap = {};
+        if (roomIds.length > 0) {
+          const allMb = secondaryResults[2] || [];
+          const allMemberIds = Array.from(new Set(allMb.map(m => m.user_id))).filter(id => id && id !== userId);
+          if (allMemberIds.length > 0) {
+            try {
+              const memberUsers = await sbGet(`/goroom_users?select=id,nickname,profile_img&id=in.(${allMemberIds.join(',')})`);
+              (memberUsers||[]).forEach(u => { memberUsersMap[u.id] = u; });
+            } catch(e) { console.error('Failed to load member users:', e); }
+          }
+        }
         // 친구 처리
         if (friendRows.length > 0) {
           const friendUsers = secondaryResults[0] || [];
@@ -335,7 +348,7 @@ function AppMain({ authUser, onLogout }){
           const loadedRooms = (roomsArr||[]).map(r => ({
             id: r.id, name: r.name, desc: r.description||'', isPersonal: r.is_personal||false, isPublic: r.is_public!==false,
             thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'', slug: r.slug||'',
-            members: (mbByRoom[r.id]||[]).map(m => ({id: m.user_id, role: m.role||'member'})), newCount: 0, nearestSchedule: null,
+            members: (mbByRoom[r.id]||[]).map(m => { const u = memberUsersMap[m.user_id] || {}; return { id: m.user_id, role: m.role||'member', nickname: u.nickname || null, profileImg: u.profile_img || null }; }), newCount: 0, nearestSchedule: null,
             menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
             settings: { ...DEF_SETTINGS, ...(r.settings||{}) },
             schedules: (schByRoom[r.id]||[]).map(s => ({ id:s.id, title:s.title, date:s.date, time:s.time||'', memo:s.memo||'', mood:s.mood||'', color:s.color||'#4A90D9', catId:s.cat_id||'', images:s.images||[], location:s.location||'', locationDetail:s.location_detail||'', createdAt:new Date(s.created_at||Date.now()).getTime(), createdBy:s.created_by, todos:s.todos||[], dday:s.dday||false, repeat:s.repeat||null, alarm:s.alarm||null, budget:s.budget||null, likes:s.likes||[] })),
@@ -495,10 +508,19 @@ function AppMain({ authUser, onLogout }){
       ]);
       const r = rArr?.[0];
       if (!r) throw new Error('Room not found');
+      // 멤버 유저 정보 fetch
+      let joinMemberUsersMap = {};
+      const joinMemberIds = Array.from(new Set((allMembers||[]).map(m => m.user_id))).filter(id => id && id !== userId);
+      if (joinMemberIds.length > 0) {
+        try {
+          const memberUsers = await sbGet(`/goroom_users?select=id,nickname,profile_img&id=in.(${joinMemberIds.join(',')})`);
+          (memberUsers||[]).forEach(u => { joinMemberUsersMap[u.id] = u; });
+        } catch(e) { console.error('Failed to load join member users:', e); }
+      }
       const newRoom = {
         id: r.id, name: r.name, desc: r.description||'', isPersonal: false, isPublic: r.is_public!==false,
         thumbnailUrl: r.thumbnail_url||'', inviteCode: r.invite_code||'', invitePassword: r.invite_password||'', slug: r.slug||'',
-        members: (allMembers||[]).map(m=>({id: m.user_id, role: m.role||'member'})), newCount:0, nearestSchedule:null,
+        members: (allMembers||[]).map(m => { const u = joinMemberUsersMap[m.user_id] || {}; return { id: m.user_id, role: m.role||'member', nickname: u.nickname || null, profileImg: u.profile_img || null }; }), newCount:0, nearestSchedule:null,
         menus: {cal:true,map:false,memo:true,todo:true,diary:true,budget:true,alarm:true,...(r.menus||{})},
         settings: {...DEF_SETTINGS,...(r.settings||{})},
         schedules: (schedules||[]).map(s=>({id:s.id,title:s.title,date:s.date,time:s.time||'',memo:s.memo||'',mood:s.mood||'',color:s.color||'#4A90D9',catId:s.cat_id||'',images:s.images||[],location:s.location||'',locationDetail:s.location_detail||'',createdAt:new Date(s.created_at||Date.now()).getTime(),createdBy:s.created_by,todos:s.todos||[],dday:s.dday||false,repeat:s.repeat||null,alarm:s.alarm||null,budget:s.budget||null,likes:s.likes||[]})),
