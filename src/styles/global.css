@@ -369,6 +369,7 @@
 .gr-storage-modal-title{text-align:center;font-size:18px;font-weight:700;color:var(--gr-text);margin-bottom:8px}
 .gr-storage-modal-desc{text-align:center;font-size:13px;color:var(--gr-t2);line-height:1.5;margin-bottom:24px}
 .gr-storage-modal-desc strong{color:var(--gr-acc);font-weight:600}
+/* Legacy (유지) */
 .gr-storage-plans{display:flex;gap:10px;margin-bottom:20px}
 .gr-storage-plan{flex:1;border:2px solid var(--gr-brd);border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
 .gr-storage-plan.on{border-color:var(--gr-acc);background:rgba(204,34,44,.04)}
@@ -376,9 +377,85 @@
 .gr-storage-plan.popular.on{border-color:var(--gr-acc)}
 .gr-plan-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#F59E0B;color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;white-space:nowrap}
 .gr-plan-size{font-size:16px;font-weight:700;color:var(--gr-text);margin-bottom:6px}
-.gr-plan-price{display:flex;align-items:baseline;justify-content:center;gap:2px}
 .gr-plan-won{font-size:18px;font-weight:700;color:var(--gr-acc)}
 .gr-plan-unit{font-size:11px;color:var(--gr-t3)}
+
+/* 신규 카카오워크 스타일 플랜 카드 */
+.gr-plan-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(155px,1fr));
+  gap:12px;
+  margin-bottom:4px;
+}
+.gr-plan-card{
+  position:relative;
+  background:#fff;
+  border:2px solid var(--gr-brd);
+  border-radius:16px;
+  padding:18px 16px 16px;
+  cursor:pointer;
+  transition:border-color .18s,box-shadow .18s,transform .18s;
+  display:flex;
+  flex-direction:column;
+  min-height:170px;
+  box-shadow:0 1px 2px rgba(17,17,17,.03);
+}
+.gr-plan-card:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(17,17,17,.06)}
+.gr-plan-card.on{
+  border-color:var(--gr-acc);
+  box-shadow:0 6px 22px rgba(204,34,44,.12);
+}
+.gr-plan-card .gr-plan-flag{
+  position:absolute;top:12px;right:12px;
+  background:var(--gr-acc);color:#fff;
+  font-size:10px;font-weight:700;
+  padding:3px 9px;border-radius:999px;
+  letter-spacing:.2px;
+}
+.gr-plan-card .gr-plan-tier{
+  display:inline-block;align-self:flex-start;
+  font-size:11px;font-weight:700;
+  color:#6b7280;
+  background:#f3f4f6;
+  padding:4px 10px;border-radius:8px;
+  margin-bottom:14px;
+  letter-spacing:.3px;
+}
+.gr-plan-card.on .gr-plan-tier{
+  color:var(--gr-acc);
+  background:rgba(204,34,44,.08);
+}
+.gr-plan-card .gr-plan-price{
+  display:flex;align-items:baseline;gap:3px;
+  margin-bottom:6px;
+}
+.gr-plan-card .gr-plan-price-num{
+  font-size:26px;font-weight:800;
+  color:var(--gr-text);
+  letter-spacing:-0.5px;
+  line-height:1;
+}
+.gr-plan-card.on .gr-plan-price-num{color:var(--gr-acc)}
+.gr-plan-card .gr-plan-price-unit{
+  font-size:13px;font-weight:600;
+  color:var(--gr-t3);
+}
+.gr-plan-card .gr-plan-price-unit .sep{margin:0 1px;opacity:.5}
+.gr-plan-card .gr-plan-name{
+  font-size:13px;font-weight:700;
+  color:var(--gr-text);
+  margin-bottom:6px;
+}
+.gr-plan-card .gr-plan-desc{
+  font-size:12px;line-height:1.55;
+  color:var(--gr-t3);
+  margin-top:auto;
+}
+@media (max-width:420px){
+  .gr-plan-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .gr-plan-card{min-height:160px;padding:16px 14px 14px}
+  .gr-plan-card .gr-plan-price-num{font-size:22px}
+}
 .gr-storage-pay-btn{width:100%;padding:14px;border:none;border-radius:12px;background:#0064FF;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--gr-ff);transition:background .2s}
 .gr-storage-pay-btn:hover{background:#0052D4}
 .gr-storage-pay-btn:disabled{background:#ccc;cursor:not-allowed}

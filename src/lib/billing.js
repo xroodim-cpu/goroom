@@ -2,9 +2,34 @@ import { Capacitor } from '@capacitor/core';
 
 // 전 플랫폼 공통 플랜 (Netflix 방식: 웹/데스크톱/Android 앱 모두 Toss 웹결제 사용)
 export const PLANS = [
-  { id: 'plan_20g', name: '20 GB', bytes: 20 * 1024 * 1024 * 1024, price: 3900, label: '3,900' },
-  { id: 'plan_50g', name: '50 GB', bytes: 50 * 1024 * 1024 * 1024, price: 7900, label: '7,900', popular: true },
-  { id: 'plan_100g', name: '100 GB', bytes: 100 * 1024 * 1024 * 1024, price: 12900, label: '12,900' },
+  {
+    id: 'plan_20g',
+    name: '20 GB',
+    tier: 'Lite',
+    bytes: 20 * 1024 * 1024 * 1024,
+    price: 3900,
+    label: '3,900',
+    desc: '사진·문서를 여유롭게 백업하는 시작 플랜',
+  },
+  {
+    id: 'plan_50g',
+    name: '50 GB',
+    tier: 'Plus',
+    bytes: 50 * 1024 * 1024 * 1024,
+    price: 7900,
+    label: '7,900',
+    popular: true,
+    desc: '가족·팀과 풍부한 사진·문서까지 담는 인기 플랜',
+  },
+  {
+    id: 'plan_100g',
+    name: '100 GB',
+    tier: 'Pro',
+    bytes: 100 * 1024 * 1024 * 1024,
+    price: 12900,
+    label: '12,900',
+    desc: '장기 보관과 대용량 파일까지 담는 넉넉한 플랜',
+  },
 ];
 
 export const PLAN_BYTES = PLANS.reduce((acc, p) => { acc[p.id] = p.bytes; return acc; }, {});

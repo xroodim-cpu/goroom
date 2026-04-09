@@ -42,21 +42,26 @@ export default function StorageLimitModal({ onClose, usedSize, storageLimit, use
           <br/>용량을 추가해서 계속 업로드하세요
         </div>
 
-        <div className="gr-storage-plans">
-          {PLANS.map(plan => (
-            <div
-              key={plan.id}
-              className={`gr-storage-plan ${selected === plan.id ? 'on' : ''} ${plan.popular ? 'popular' : ''}`}
-              onClick={() => setSelected(plan.id)}
-            >
-              {plan.popular && <div className="gr-plan-badge">추천</div>}
-              <div className="gr-plan-size">{plan.name}</div>
-              <div className="gr-plan-price">
-                <span className="gr-plan-won">{plan.label}</span>
-                <span className="gr-plan-unit">원/월</span>
+        <div className="gr-plan-grid">
+          {PLANS.map(plan => {
+            const on = selected === plan.id;
+            return (
+              <div
+                key={plan.id}
+                className={`gr-plan-card ${on ? 'on' : ''} ${plan.popular ? 'popular' : ''}`}
+                onClick={() => setSelected(plan.id)}
+              >
+                {plan.popular && <div className="gr-plan-flag">추천</div>}
+                <div className="gr-plan-tier">{plan.tier}</div>
+                <div className="gr-plan-price">
+                  <span className="gr-plan-price-num">{plan.label}</span>
+                  <span className="gr-plan-price-unit">원<span className="sep">/</span>월</span>
+                </div>
+                <div className="gr-plan-name">{plan.name}</div>
+                <div className="gr-plan-desc">{plan.desc}</div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <button

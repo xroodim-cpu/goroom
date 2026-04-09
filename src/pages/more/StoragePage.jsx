@@ -124,32 +124,32 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
 
               {/* 무료 사용자: 인라인 요금제 선택 */}
               {!isPaid && !isAdmin && (
-                <div style={{marginTop:16}}>
-                  <div style={{display:'flex',gap:8,marginBottom:12}}>
-                    {PLANS.map(plan => (
-                      <div
-                        key={plan.id}
-                        onClick={() => setSelectedPlan(plan.id)}
-                        style={{
-                          flex:1, border: selectedPlan===plan.id ? '2px solid var(--gr-acc)' : '2px solid var(--gr-brd)',
-                          borderRadius:12, padding:'12px 4px', textAlign:'center', cursor:'pointer',
-                          background: selectedPlan===plan.id ? 'rgba(204,34,44,.04)' : 'var(--gr-bg)',
-                          position:'relative', transition:'all .2s',
-                        }}
-                      >
-                        {plan.popular && <div style={{position:'absolute',top:-9,left:'50%',transform:'translateX(-50%)',background:'#F59E0B',color:'#fff',fontSize:9,fontWeight:700,padding:'1px 8px',borderRadius:8,whiteSpace:'nowrap'}}>추천</div>}
-                        <div style={{fontSize:14,fontWeight:700,color:'var(--gr-text)',marginBottom:4}}>{plan.name}</div>
-                        <div style={{display:'flex',alignItems:'baseline',justifyContent:'center',gap:1}}>
-                          <span style={{fontSize:15,fontWeight:700,color:'var(--gr-acc)'}}>{plan.label}</span>
-                          <span style={{fontSize:10,color:'var(--gr-t3)'}}>원/월</span>
+                <div style={{marginTop:20}}>
+                  <div className="gr-plan-grid">
+                    {PLANS.map(plan => {
+                      const selected = selectedPlan === plan.id;
+                      return (
+                        <div
+                          key={plan.id}
+                          className={`gr-plan-card ${selected ? 'on' : ''} ${plan.popular ? 'popular' : ''}`}
+                          onClick={() => setSelectedPlan(plan.id)}
+                        >
+                          {plan.popular && <div className="gr-plan-flag">추천</div>}
+                          <div className="gr-plan-tier">{plan.tier}</div>
+                          <div className="gr-plan-price">
+                            <span className="gr-plan-price-num">{plan.label}</span>
+                            <span className="gr-plan-price-unit">원<span className="sep">/</span>월</span>
+                          </div>
+                          <div className="gr-plan-name">{plan.name}</div>
+                          <div className="gr-plan-desc">{plan.desc}</div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <button className="gr-storage-pay-btn" style={{width:'100%'}} onClick={handlePayment} disabled={processing}>
+                  <button className="gr-storage-pay-btn" style={{width:'100%',marginTop:18}} onClick={handlePayment} disabled={processing}>
                     {processing ? '결제 준비 중...' : '구독하기'}
                   </button>
-                  <div style={{textAlign:'center',fontSize:11,color:'var(--gr-t3)',marginTop:6}}>정기결제는 매월 자동 갱신되며, 언제든 해지 가능</div>
+                  <div style={{textAlign:'center',fontSize:11,color:'var(--gr-t3)',marginTop:8}}>정기결제는 매월 자동 갱신되며, 언제든 해지 가능</div>
                 </div>
               )}
 
