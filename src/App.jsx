@@ -71,6 +71,31 @@ function AppInner() {
   const { user, authChecked, handleLogin, handleLogout } = useAuth();
   const location = useLocation();
 
+  // Android: StatusBar 흰 배경 + 어두운 아이콘 강제 (Kakao #FEE500 잔재 제거)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.getPlatform() !== 'android') return;
+        const { StatusBar, Style } = await import('@capacitor/status-bar');
+        await StatusBar.setBackgroundColor({ color: '#ffffff' });
+        await StatusBar.setStyle({ style: Style.Light });
+        await StatusBar.setOverlaysWebView({ overlay: false });
+      } catch (e) {
+        console.warn('[statusbar] setup failed', e);
+      }
+    })();
+  }, []);
+
+  // 부트 스플래시 제거 트리거: authChecked 완료 후 window.__GR_READY__ = true
+  useEffect(() => {
+    if (authChecked) {
+      requestAnimationFrame(() => {
+        try { window.__GR_READY__ = true; } catch {}
+      });
+    }
+  }, [authChecked]);
+
   // 초대링크 감지: ?join=CODE 또는 /@slug → localStorage에 보존
   useEffect(() => {
     try {

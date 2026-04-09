@@ -12,6 +12,11 @@
     "LocalNotifications": {
       "smallIcon": "ic_stat_icon_config_sample",
       "iconColor": "#cc222c"
+    },
+    "StatusBar": {
+      "backgroundColor": "#ffffff",
+      "style": "LIGHT",
+      "overlaysWebView": false
     }
   }
 }

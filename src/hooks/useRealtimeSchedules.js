@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
+import { showNotification as notify } from '../lib/notify';
 
 function mapRow(s) {
   return {
@@ -12,15 +13,6 @@ function mapRow(s) {
     dday: s.dday || false, repeat: s.repeat || null,
     alarm: s.alarm || null, budget: s.budget || null,
   };
-}
-
-function showNotification(title, body) {
-  const opts = { body, icon: '/icon-192.png' };
-  if (navigator.serviceWorker?.controller) {
-    navigator.serviceWorker.ready.then(reg => reg.showNotification(title, opts)).catch(() => {});
-  } else if (Notification.permission === 'granted') {
-    new Notification(title, opts);
-  }
 }
 
 export default function useRealtimeSchedules(rooms, userId, updateRoom) {
@@ -51,9 +43,13 @@ export default function useRealtimeSchedules(rooms, userId, updateRoom) {
         }));
 
         const notiEnabled = localStorage.getItem('gr_noti_schedule') !== 'false';
-        if (notiEnabled && Notification.permission === 'granted') {
+        if (notiEnabled) {
           const room = rooms.find(r => r.id === row.room_id);
-          showNotification(room?.name || '고룸', `새 스케줄: ${row.title}`);
+          notify({
+            title: room?.name || '고룸',
+            body: `새 스케줄: ${row.title}`,
+            url: `/calendar/${row.room_id}/cal`,
+          });
         }
       })
       .subscribe();

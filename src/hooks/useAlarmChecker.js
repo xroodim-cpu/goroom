@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { showNotification as notify, requestNotificationPermission, getNotificationPermission } from '../lib/notify';
 
 const OFFSETS = { '10m': 600000, '30m': 1800000, '1h': 3600000, '1d': 86400000 };
 const LABELS = { '10m': '10분 전', '30m': '30분 전', '1h': '1시간 전', '1d': '하루 전' };
@@ -26,34 +27,10 @@ function getNextOccurrence(sch, now) {
   return null;
 }
 
-async function showNotification(title, body, roomId) {
-  // 모바일: Capacitor LocalNotifications 사용
-  try {
-    const { Capacitor } = window;
-    if (Capacitor && Capacitor.isNativePlatform?.()) {
-      const { LocalNotifications } = await import('@capacitor/local-notifications');
-      await LocalNotifications.schedule({
-        notifications: [{
-          title: title,
-          body: body,
-          id: Math.floor(Math.random() * 100000),
-          smallIcon: 'ic_stat_icon_config_sample',
-          largeBody: body,
-        }],
-      });
-      return;
-    }
-  } catch (e) {
-    // 모바일 플러그인 로드 실패, 웹 방식으로 폴백
-  }
-
-  // 웹: ServiceWorker 또는 브라우저 알림 사용
-  const opts = { body, icon: '/icon-192.png', data: { url: `/calendar/${roomId}/cal` } };
-  if (navigator.serviceWorker?.controller) {
-    navigator.serviceWorker.ready.then(reg => reg.showNotification(title, opts)).catch(() => {});
-  } else if (Notification.permission === 'granted') {
-    new Notification(title, opts);
-  }
+// 알림 표시는 lib/notify.js 의 통합 API(showNotification) 사용
+// → 플랫폼별(Capacitor/Electron/Web) 분기는 notify.js 에서 일괄 처리
+async function fireNotification(title, body, roomId) {
+  await notify({ title, body, url: `/calendar/${roomId}/cal` });
 }
 
 export default function useAlarmChecker(rooms, userId) {
@@ -66,35 +43,38 @@ export default function useAlarmChecker(rooms, userId) {
       if (saved) firedRef.current = new Set(JSON.parse(saved));
     } catch {}
 
-    // 모바일: 알림 권한 요청
+    // 알림 권한: 플랫폼 무관 (notify.js 에서 자동 분기)
     (async () => {
       try {
-        const { Capacitor } = window;
-        if (Capacitor && Capacitor.isNativePlatform?.()) {
-          const { LocalNotifications } = await import('@capacitor/local-notifications');
-          const perm = await LocalNotifications.checkPermissions();
-          if (perm?.display !== 'granted') {
-            await LocalNotifications.requestPermissions();
-          }
+        const perm = await getNotificationPermission();
+        if (perm !== 'granted') {
+          await requestNotificationPermission();
         }
       } catch (e) {
-        console.log('[useAlarmChecker] Mobile notification init failed:', e.message);
+        console.log('[useAlarmChecker] notification init failed:', e?.message);
       }
     })();
   }, []);
 
   useEffect(() => {
     const notiEnabled = localStorage.getItem('gr_noti_schedule') !== 'false';
-    const permGranted = Notification.permission === 'granted';
-
-    if (!rooms.length || !permGranted || !notiEnabled) {
+    if (!rooms.length || !notiEnabled) {
       if (!rooms.length) console.log('[AlarmChecker] No rooms');
-      if (!permGranted) console.log('[AlarmChecker] Notification permission not granted:', Notification.permission);
       if (!notiEnabled) console.log('[AlarmChecker] Schedule notification disabled');
       return;
     }
 
+    let cancelled = false;
+    let permGranted = false;
+    (async () => {
+      try {
+        permGranted = (await getNotificationPermission()) === 'granted';
+      } catch { permGranted = false; }
+      if (!permGranted) console.log('[AlarmChecker] notification permission not granted');
+    })();
+
     const check = () => {
+      if (!permGranted || cancelled) return;
       const now = new Date();
       let scheduleCount = 0;
 
@@ -124,7 +104,7 @@ export default function useAlarmChecker(rooms, userId) {
             console.log('[AlarmChecker] 🔔 Alarm triggered:', sch.title, 'at', alarmTime);
             const label = LABELS[sch.alarm.before] || sch.alarm.before;
             const body = sch.alarm.message || `${label} — ${sch.date}${sch.time ? ' ' + sch.time : ''}`;
-            showNotification(`🔔 ${sch.title}`, body, room.id);
+            fireNotification(`🔔 ${sch.title}`, body, room.id);
           }
         }
       }
@@ -136,6 +116,6 @@ export default function useAlarmChecker(rooms, userId) {
 
     check();
     const id = setInterval(check, 30000);
-    return () => clearInterval(id);
+    return () => { cancelled = true; clearInterval(id); };
   }, [rooms, userId]);
 }
