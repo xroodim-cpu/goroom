@@ -513,7 +513,7 @@ function AppMain({ authUser, onLogout }){
     const planId = params.get('plan');
     const targetUserId = params.get('userId') || userId;
     if (!planId) { navigate('/'); return; }
-    const PLANS_MAP = { plan_20g: 20*1024*1024*1024, plan_50g: 50*1024*1024*1024, plan_100g: 100*1024*1024*1024 };
+    const PLANS_MAP = { plan_20g: 20*1024*1024*1024, plan_50g: 50*1024*1024*1024, plan_100g: 100*1024*1024*1024, plan_200g: 200*1024*1024*1024 };
     const newLimit = PLANS_MAP[planId];
     if (!newLimit || !targetUserId) { navigate('/'); return; }
     (async () => {

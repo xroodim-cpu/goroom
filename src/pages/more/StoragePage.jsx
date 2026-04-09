@@ -10,6 +10,7 @@ const PLAN_LABELS = {
   [20 * 1024 * 1024 * 1024]: '20 GB',
   [50 * 1024 * 1024 * 1024]: '50 GB',
   [100 * 1024 * 1024 * 1024]: '100 GB',
+  [200 * 1024 * 1024 * 1024]: '200 GB',
 };
 
 export default function StoragePage({ goBack, rooms, userId, me }) {

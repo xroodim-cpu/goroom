@@ -30,6 +30,15 @@ export const PLANS = [
     label: '12,900',
     desc: '장기 보관과 대용량 파일까지 담는 넉넉한 플랜',
   },
+  {
+    id: 'plan_200g',
+    name: '200 GB',
+    tier: 'Max',
+    bytes: 200 * 1024 * 1024 * 1024,
+    price: 19900,
+    label: '19,900',
+    desc: '대규모 팀·고화질 영상까지 담는 최상위 플랜',
+  },
 ];
 
 export const PLAN_BYTES = PLANS.reduce((acc, p) => { acc[p.id] = p.bytes; return acc; }, {});
