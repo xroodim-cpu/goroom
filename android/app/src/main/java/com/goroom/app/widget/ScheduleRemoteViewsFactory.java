@@ -189,19 +189,18 @@ public class ScheduleRemoteViewsFactory implements RemoteViewsService.RemoteView
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_schedule_item);
         views.setTextViewText(R.id.item_title, item.title);
 
-        // 컬러바
+        // 색깔 점 (구글 캘린더 스타일)
         try {
-            views.setInt(R.id.item_color_bar, "setBackgroundColor", Color.parseColor(item.color));
+            views.setInt(R.id.item_color_dot, "setColorFilter", Color.parseColor(item.color));
         } catch (Exception e) {
-            views.setInt(R.id.item_color_bar, "setBackgroundColor", Color.parseColor("#4A90D9"));
+            views.setInt(R.id.item_color_dot, "setColorFilter", Color.parseColor("#4A90D9"));
         }
 
-        // 시간
+        // 시간 (없으면 "종일")
         if (!item.time.isEmpty()) {
             views.setTextViewText(R.id.item_time, item.time);
-            views.setViewVisibility(R.id.item_time, View.VISIBLE);
         } else {
-            views.setViewVisibility(R.id.item_time, View.GONE);
+            views.setTextViewText(R.id.item_time, "종일");
         }
 
         return views;

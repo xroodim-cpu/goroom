@@ -4,56 +4,54 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@drawable/widget_background"
-    android:padding="16dp">
+    android:padding="20dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingBottom="12dp">
+        android:orientation="vertical"
+        android:paddingBottom="14dp">
 
         <TextView
             android:id="@+id/widget_title"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="고룸 · 오늘"
-            android:textSize="16sp"
+            android:text="오늘"
+            android:textSize="22sp"
             android:textStyle="bold"
-            android:textColor="#cc222c" />
+            android:textColor="#1F1F1F"
+            android:letterSpacing="-0.02" />
 
         <TextView
             android:id="@+id/widget_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:textSize="13sp"
-            android:textColor="#888888" />
+            android:textColor="#5F6368" />
     </LinearLayout>
 
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#EEEEEE" />
-
-    <ListView
-        android:id="@+id/widget_schedule_list"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:divider="@null"
-        android:dividerHeight="0dp"
-        android:paddingTop="4dp" />
+        android:layout_weight="1">
 
-    <TextView
-        android:id="@+id/widget_empty"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
-        android:text="오늘은 일정이 없어요 ☁️"
-        android:textSize="13sp"
-        android:textColor="#AAAAAA"
-        android:visibility="gone" />
+        <ListView
+            android:id="@+id/widget_schedule_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="0dp" />
+
+        <TextView
+            android:id="@+id/widget_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="일정 없음"
+            android:textSize="14sp"
+            android:textColor="#9AA0A6"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </LinearLayout>

@@ -61,6 +61,9 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 알람/알림 관련: Android 13+ 런타임 알림 권한 + 정확한 시각 예약 + Doze 모드 우회 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Google Play Billing 제거: Toss 웹결제만 사용 (Reader App 예외) -->
 </manifest>
