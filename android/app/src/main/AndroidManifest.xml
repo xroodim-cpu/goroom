@@ -22,6 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep Link: goroom://payment/success · goroom://payment/fail (Toss 결제 복귀) -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="goroom" android:host="payment" />
+            </intent-filter>
+
         </activity>
 
         <receiver android:name=".widget.TodayScheduleWidget" android:exported="true">
@@ -54,5 +62,5 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="com.android.vending.BILLING" />
+    <!-- Google Play Billing 제거: Toss 웹결제만 사용 (Reader App 예외) -->
 </manifest>
