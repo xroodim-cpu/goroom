@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import I from '../../components/shared/Icon';
 import { listFolderSize } from '../../wasabi';
 import { fmtSize } from '../../lib/helpers';
+import { isNativeAndroid, initBilling, purchaseSubscription, getActiveSubscription, openSubscriptionManagement } from '../../lib/billing';
 
 const FREE_LIMIT = 1024 * 1024 * 1024; // 1GB 기본 무료
 
@@ -12,9 +13,9 @@ const PLAN_LABELS = {
 };
 
 const PLANS = [
-  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3300, label: '3,300' },
-  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 6600, label: '6,600', popular: true },
-  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 11000, label: '11,000' },
+  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3900, label: '3,900' },
+  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 7900, label: '7,900', popular: true },
+  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 12900, label: '12,900' },
 ];
 
 export default function StoragePage({ goBack, rooms, userId, me }) {
@@ -49,27 +50,38 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
 
   const pct = Math.min((totalSize / storageLimit) * 100, 100);
 
+  const isAndroid = isNativeAndroid();
+
+  useEffect(() => {
+    if (isAndroid) initBilling().catch(console.error);
+  }, []);
+
   const handlePayment = async () => {
     const plan = PLANS.find(p => p.id === selectedPlan);
     if (!plan || processing) return;
     setProcessing(true);
     try {
-      if (!window.TossPayments) {
-        const script = document.createElement('script');
-        script.src = 'https://js.tosspayments.com/v2/standard';
-        script.onload = () => initPayment(plan);
-        document.head.appendChild(script);
+      if (isAndroid) {
+        await purchaseSubscription(plan.id);
       } else {
-        await initPayment(plan);
+        if (!window.TossPayments) {
+          const script = document.createElement('script');
+          script.src = 'https://js.tosspayments.com/v2/standard';
+          script.onload = () => initTossPayment(plan);
+          document.head.appendChild(script);
+        } else {
+          await initTossPayment(plan);
+        }
       }
     } catch (e) {
       console.error('Payment error:', e);
       alert('결제 초기화에 실패했습니다. 다시 시도해주세요.');
+    } finally {
       setProcessing(false);
     }
   };
 
-  const initPayment = async (plan) => {
+  const initTossPayment = async (plan) => {
     try {
       const tossPayments = TossPayments('live_ck_kZLKGPx4M3MYMxPPy6eVBaWypv1o');
       const payment = tossPayments.payment({ customerKey: userId });
@@ -154,7 +166,7 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
                     ))}
                   </div>
                   <button className="gr-storage-pay-btn" style={{width:'100%'}} onClick={handlePayment} disabled={processing}>
-                    {processing ? '결제 준비 중...' : '구독하기'}
+                    {processing ? '결제 준비 중...' : isAndroid ? 'Google Play로 구독하기' : '구독하기'}
                   </button>
                   <div style={{textAlign:'center',fontSize:11,color:'var(--gr-t3)',marginTop:6}}>정기결제는 매월 자동 갱신되며, 언제든 해지 가능</div>
                 </div>
@@ -163,6 +175,11 @@ export default function StoragePage({ goBack, rooms, userId, me }) {
               {isPaid && (
                 <div className="gr-storage-info-row" style={{marginTop:8}}>
                   <span style={{fontSize:11,color:'var(--gr-t3)'}}>정기결제 중 · 해지는 설정에서 가능</span>
+                  {isAndroid && (
+                    <button onClick={openSubscriptionManagement} style={{fontSize:11,color:'var(--gr-acc)',background:'none',border:'none',cursor:'pointer',padding:0}}>
+                      구독 관리
+                    </button>
+                  )}
                 </div>
               )}
             </div>

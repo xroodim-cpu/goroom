@@ -18,9 +18,9 @@ export default async function handler(req, res) {
   const protocol = req.headers['x-forwarded-proto'] || 'https';
   const baseUrl = `${protocol}://${host}`;
 
-  let title = '구롬 GoRoom';
-  let description = '스케줄 · 가계부 · 메모';
-  let image = `${baseUrl}/icon-192.png`;
+  let title = '고룸 GoRoom';
+  let description = '시간을 다양하게 담아내고, 서로의 시간을 공유해보세요.';
+  let image = `${baseUrl}/og-default.jpg`;
   let url = baseUrl;
 
   try {
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     <meta property="og:description" content="${esc(description)}"/>
     <meta property="og:image" content="${esc(image)}"/>
     <meta property="og:url" content="${esc(url)}"/>
-    <meta property="og:site_name" content="구롬 GoRoom"/>
+    <meta property="og:site_name" content="고룸 GoRoom"/>
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="${esc(title)}"/>
     <meta name="twitter:description" content="${esc(description)}"/>

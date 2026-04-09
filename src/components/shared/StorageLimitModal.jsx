@@ -1,39 +1,49 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import I from './Icon';
 import { fmtSize } from '../../lib/helpers';
+import { isNativeAndroid, initBilling, purchaseSubscription } from '../../lib/billing';
 
 const PLANS = [
-  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3300, label: '3,300' },
-  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 6600, label: '6,600', popular: true },
-  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 11000, label: '11,000' },
+  { id: 'plan_20g', name: '20 GB', bytes: 20*1024*1024*1024, price: 3900, label: '3,900' },
+  { id: 'plan_50g', name: '50 GB', bytes: 50*1024*1024*1024, price: 7900, label: '7,900', popular: true },
+  { id: 'plan_100g', name: '100 GB', bytes: 100*1024*1024*1024, price: 12900, label: '12,900' },
 ];
 
 export default function StorageLimitModal({ onClose, usedSize, storageLimit, userId, onUpgradeComplete }) {
   const [selected, setSelected] = useState('plan_50g');
   const [processing, setProcessing] = useState(false);
+  const isAndroid = isNativeAndroid();
+
+  useEffect(() => {
+    if (isAndroid) initBilling().catch(console.error);
+  }, []);
 
   const handlePayment = async () => {
     const plan = PLANS.find(p => p.id === selected);
     if (!plan || processing) return;
     setProcessing(true);
     try {
-      // 토스페이먼츠 SDK 로드
-      if (!window.TossPayments) {
-        const script = document.createElement('script');
-        script.src = 'https://js.tosspayments.com/v2/standard';
-        script.onload = () => initPayment(plan);
-        document.head.appendChild(script);
+      if (isAndroid) {
+        await purchaseSubscription(plan.id);
       } else {
-        await initPayment(plan);
+        if (!window.TossPayments) {
+          const script = document.createElement('script');
+          script.src = 'https://js.tosspayments.com/v2/standard';
+          script.onload = () => initTossPayment(plan);
+          document.head.appendChild(script);
+        } else {
+          await initTossPayment(plan);
+        }
       }
     } catch (e) {
       console.error('Payment error:', e);
       alert('결제 초기화에 실패했습니다. 다시 시도해주세요.');
+    } finally {
       setProcessing(false);
     }
   };
 
-  const initPayment = async (plan) => {
+  const initTossPayment = async (plan) => {
     try {
       const tossPayments = TossPayments('live_ck_kZLKGPx4M3MYMxPPy6eVBaWypv1o');
       const payment = tossPayments.payment({ customerKey: userId });
@@ -87,7 +97,7 @@ export default function StorageLimitModal({ onClose, usedSize, storageLimit, use
           onClick={handlePayment}
           disabled={processing}
         >
-          {processing ? '결제 준비 중...' : '토스페이로 정기결제'}
+          {processing ? '결제 준비 중...' : isAndroid ? 'Google Play로 정기결제' : '토스페이로 정기결제'}
         </button>
 
         <div className="gr-storage-modal-note">

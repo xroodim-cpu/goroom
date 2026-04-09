@@ -19,6 +19,9 @@ import './styles/global.css';
 
 /* ── Page imports ── */
 import LoginPage from './pages/Login';
+import LandingPage from './pages/LandingPage';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import MyInfoPage from './pages/more/MyInfo';
 import AddFriendPage from './pages/more/AddFriend';
 import NotificationSettings from './pages/more/NotificationSettings';
@@ -65,6 +68,7 @@ export default function App() {
 
 function AppInner() {
   const { user, authChecked, handleLogin, handleLogout } = useAuth();
+  const location = useLocation();
 
   // 초대링크 감지: ?join=CODE 또는 /@slug → localStorage에 보존
   useEffect(() => {
@@ -82,7 +86,7 @@ function AppInner() {
       }
       // OAuth 리다이렉트 후 원래 경로 복원용
       const fullPath = window.location.pathname + window.location.search;
-      if (fullPath !== '/' && !window.location.hash.includes('access_token')) {
+      if (fullPath !== '/' && fullPath !== '/login' && fullPath !== '/privacy' && fullPath !== '/terms' && !window.location.hash.includes('access_token')) {
         try { localStorage.setItem('goroom_redirect_path', fullPath); } catch(e) {}
       }
     } catch(e) { console.error('Init useEffect error:', e); }
@@ -94,7 +98,16 @@ function AppInner() {
     </div>
   );
 
-  if (!user) return <LoginPage onLogin={handleLogin}/>;
+  if (!user) {
+    const path = location.pathname;
+    if (path === '/privacy') return <PrivacyPolicy />;
+    if (path === '/terms') return <TermsOfService />;
+    if (path === '/login') return <LoginPage onLogin={handleLogin} />;
+    return <LandingPage />;
+  }
+
+  if (location.pathname === '/privacy') return <PrivacyPolicy />;
+  if (location.pathname === '/terms') return <TermsOfService />;
 
   return <AppMain authUser={user} onLogout={handleLogout}/>;
 }

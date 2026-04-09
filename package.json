@@ -29,6 +29,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/local-notifications": "^8.0.2",
     "@supabase/supabase-js": "^2.39.0",
+    "cordova-plugin-purchase": "^13.13.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.14.0"
@@ -38,6 +39,8 @@
     "cross-env": "^7.0.3",
     "electron": "^41.1.1",
     "electron-builder": "^26.8.1",
+    "puppeteer": "^24.40.0",
+    "sharp": "^0.34.5",
     "vite": "^5.0.0"
   },
   "build": {
@@ -53,13 +56,14 @@
     "extraResources": [],
     "win": {
       "target": "nsis",
-      "icon": "electron/icon.png"
+      "icon": "electron/icon.ico",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "electron/icon.png",
-      "uninstallerIcon": "electron/icon.png",
+      "installerIcon": "electron/icon.ico",
+      "uninstallerIcon": "electron/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "구롬"

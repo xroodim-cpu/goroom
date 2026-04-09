@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import I from '../components/shared/Icon';
 
 export default function LoginPage({ onLogin }) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState('main');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,10 +71,9 @@ export default function LoginPage({ onLogin }) {
   if (mode === 'main') return (
     <div className="gr-login-wrap">
       <div className="gr-login-card">
+        <button className="gr-login-back" onClick={() => navigate('/')}><I n="back" size={20}/></button>
         <div className="gr-login-logo">
-          <div className="gr-login-logo-icon">구</div>
-          <div className="gr-login-logo-text">구<span>롬</span></div>
-          <div className="gr-login-subtitle">스케줄 · 가계부 · 메모</div>
+          <img src="/icon-192.png" alt="고룸" style={{width:80,height:80,borderRadius:16,boxShadow:'0 4px 12px rgba(204,34,44,.4)'}}/>
         </div>
         <div className="gr-login-buttons">
           <button className="gr-login-btn gr-login-btn-email" onClick={() => setMode('email-login')}>
