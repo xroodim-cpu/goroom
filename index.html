@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#ffffff"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-  <meta name="apple-mobile-web-app-title" content="고룸 GoRoom"/>
+  <meta name="apple-mobile-web-app-title" content="고룸 GOROOM"/>
   <link rel="manifest" href="/manifest.json"/>
   <style>
     @font-face { font-family:'KakaoSmallFont'; src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/2503@1.0/KakaoSmallSans-Light.woff2') format('woff2'); font-weight:300; font-display:swap; }
@@ -14,14 +14,14 @@
     @font-face { font-family:'KakaoSmallFont'; src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/2503@1.0/KakaoSmallSans-Bold.woff2') format('woff2'); font-weight:700; font-display:swap; }
   </style>
   <link rel="apple-touch-icon" href="/icon-192.png"/>
-  <title>고룸 GoRoom</title>
+  <title>고룸 GOROOM</title>
   <meta property="og:type" content="website"/>
-  <meta property="og:title" content="고룸 GoRoom"/>
+  <meta property="og:title" content="고룸 GOROOM"/>
   <meta property="og:description" content="시간을 다양하게 담아내고, 서로의 시간을 공유해보세요."/>
   <meta property="og:image" content="/og-default.jpg"/>
-  <meta property="og:site_name" content="고룸 GoRoom"/>
+  <meta property="og:site_name" content="고룸 GOROOM"/>
   <meta name="twitter:card" content="summary_large_image"/>
-  <meta name="twitter:title" content="고룸 GoRoom"/>
+  <meta name="twitter:title" content="고룸 GOROOM"/>
   <meta name="twitter:description" content="시간을 다양하게 담아내고, 서로의 시간을 공유해보세요."/>
   <meta name="twitter:image" content="/og-default.jpg"/>
   <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=be8fea4f70cb373ac25d204ed1c375b7&autoload=false&libraries=services"></script>
@@ -43,7 +43,7 @@
   <style>
     #gr-boot-splash{
       position:fixed;inset:0;z-index:99999;
-      background:#cc222c;
+      background:#c3262f;
       display:flex;align-items:center;justify-content:center;
       transition:opacity .35s ease;
     }
@@ -51,31 +51,40 @@
     .gr-boot-cloud{
       width:44vw;max-width:220px;min-width:140px;
       aspect-ratio:1/1;
-      animation:grCloudFloat 2.6s ease-in-out infinite;
+      animation:grCloudFloat 1.6s ease-in-out infinite;
       will-change:transform,filter;
     }
     .gr-boot-cloud img{
       width:100%;height:100%;object-fit:contain;
-      filter:drop-shadow(0 14px 24px rgba(0,0,0,.18));
     }
     @keyframes grCloudFloat{
-      0%,100%{transform:translateY(0) scale(1);filter:drop-shadow(0 14px 24px rgba(0,0,0,.18))}
-      50%{transform:translateY(-14px) scale(1.02);filter:drop-shadow(0 22px 32px rgba(0,0,0,.22))}
+      0%,100%{transform:translateY(0) scale(1)}
+      50%{transform:translateY(-14px) scale(1.02)}
     }
   </style>
   <script>
     (function(){
+      var MIN_SHOW = 2200; // 최소 2.2초 (둥둥 한 사이클 보여주기)
+      var start = Date.now();
+      function dismiss(){
+        var el=document.getElementById('gr-boot-splash');
+        if(el){el.classList.add('hide');setTimeout(function(){el&&el.remove()},500)}
+      }
       function tryHide(){
         if(window.__GR_READY__){
-          var el=document.getElementById('gr-boot-splash');
-          if(el){el.classList.add('hide');setTimeout(function(){el&&el.remove()},500)}
+          var elapsed = Date.now() - start;
+          if(elapsed < MIN_SHOW){
+            setTimeout(dismiss, MIN_SHOW - elapsed);
+          } else {
+            dismiss();
+          }
           return;
         }
         setTimeout(tryHide,80);
       }
       tryHide();
       // 안전장치: 6초 지나면 무조건 제거
-      setTimeout(function(){var el=document.getElementById('gr-boot-splash');if(el){el.classList.add('hide');setTimeout(function(){el&&el.remove()},500);}},6000);
+      setTimeout(dismiss, 6000);
     })();
   </script>
   <div id="root"></div>

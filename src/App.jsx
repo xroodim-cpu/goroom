@@ -1137,7 +1137,7 @@ function AppMain({ authUser, onLogout }){
             {me.profileImg?<img src={me.profileImg} className="gr-profile-avatar-img" alt=""/>:<Avatar name={me.nickname} size={80}/>}
             {editProfile && <label className="gr-profile-avatar-edit"><I n="camera" size={14} color="#fff"/><input type="file" accept="image/*" onChange={e=>handleImg(e,'profileImg')} style={{display:'none'}}/></label>}
           </div>
-          {editProfile ? <div style={{width:'100%',maxWidth:260,marginTop:4}}>
+          {editProfile ? <div style={{width:'100%',maxWidth:260,marginTop:4,boxSizing:'border-box'}}>
             <div className="gr-profile-edit-row"><input className="gr-profile-inline-input name" value={me.nickname} onChange={e=>setMe(p=>({...p,nickname:e.target.value}))}/><I n="pen" size={14} color="var(--gr-t3)"/></div>
             <div className="gr-profile-edit-row"><input className="gr-profile-inline-input" value={me.statusMsg} onChange={e=>setMe(p=>({...p,statusMsg:e.target.value}))} placeholder="상태메시지"/><I n="pen" size={14} color="var(--gr-t3)"/></div>
           </div> : <div>

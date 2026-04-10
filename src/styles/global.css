@@ -18,7 +18,7 @@
 .gr-profile-top-btn{background:rgba(255,255,255,.85);border:none;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--gr-ff)}
 .gr-profile-top-btn-s{background:rgba(255,255,255,.85);border:none;border-radius:20px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--gr-ff);display:flex;align-items:center;gap:4px}
 .gr-profile-fav-btn{position:absolute;top:12px;right:12px;background:none;border:none;cursor:pointer;padding:4px;display:flex;z-index:2}
-.gr-profile-info{display:flex;flex-direction:column;align-items:center;padding:0 20px 16px;margin-top:-44px;position:relative;z-index:2}
+.gr-profile-info{display:flex;flex-direction:column;align-items:center;padding:0 20px 16px;margin-top:-44px;position:relative;z-index:2;overflow:hidden;max-width:100%;box-sizing:border-box}
 .gr-profile-avatar-wrap{position:relative;width:84px;height:84px;margin-bottom:8px}
 .gr-profile-avatar-wrap>div,.gr-profile-avatar-img{width:80px;height:80px;border-radius:50%;border:3px solid var(--gr-bg)}
 .gr-profile-avatar-img{object-fit:cover}
@@ -27,7 +27,7 @@
 .gr-profile-status{font-size:13px;color:var(--gr-t3);margin-top:2px}
 .gr-profile-bio{font-size:12px;color:var(--gr-t2);margin-top:8px;text-align:center;padding:8px 12px;background:var(--gr-bg2);border-radius:var(--gr-r-sm);max-width:280px}
 .gr-profile-edit-row{display:flex;align-items:center;gap:6px;margin-top:6px}
-.gr-profile-inline-input{flex:1;border:none;border-bottom:1px solid var(--gr-brd);outline:none;font-size:13px;padding:4px 0;font-family:var(--gr-ff);color:var(--gr-text);background:transparent;text-align:center}
+.gr-profile-inline-input{flex:1;min-width:0;border:none;border-bottom:1px solid var(--gr-brd);outline:none;font-size:13px;padding:4px 0;font-family:var(--gr-ff);color:var(--gr-text);background:transparent;text-align:center}
 .gr-profile-inline-input.name{font-size:16px;font-weight:700}
 .gr-profile-inline-input:focus{border-bottom-color:var(--gr-acc)}
 .gr-profile-edit-upload{display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--gr-r);cursor:pointer;margin-bottom:12px;overflow:hidden}

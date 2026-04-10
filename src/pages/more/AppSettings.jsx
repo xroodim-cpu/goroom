@@ -59,7 +59,7 @@ export default function AppSettings({goBack, sb, userId, onLogout}) {
     <div className="gr-pg-body">
       <div className="gr-set-row"><span className="gr-set-label">테마</span><span className="gr-set-val">라이트 (준비중)</span></div>
       <div className="gr-set-row"><span className="gr-set-label">언어</span><span className="gr-set-val">한국어</span></div>
-      <div className="gr-set-row"><span className="gr-set-label">앱 정보</span><span className="gr-set-val">GoRoom v2.0.0</span></div>
+      <div className="gr-set-row"><span className="gr-set-label">앱 정보</span><span className="gr-set-val">GOROOM v2.0.0</span></div>
       <div style={{marginTop:24}}>
         <button className="gr-btn-primary" onClick={handleLogout} style={{background:'var(--gr-t2)'}}>
           <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><I n="logout" size={16} color="#fff"/> 로그아웃</span>
