@@ -3,6 +3,7 @@ import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
 import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl, extFromFile, isVideo as isVideoHelper } from './lib/helpers';
 import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
+import { cacheSnapshot, loadCachedFallback, isOnline as checkOnline, addToSyncQueue, getSyncQueue, removeSyncItem, putOne, deleteOne as idbDelete, pendingSyncCount } from './lib/offlineStore';
 import { Capacitor } from '@capacitor/core';
 import GoRoomWidget from './plugins/GoRoomWidget';
 import I from './components/shared/Icon';
@@ -153,6 +154,7 @@ function AppInner() {
     if (path === '/privacy') return <PrivacyPolicy />;
     if (path === '/terms') return <TermsOfService />;
     if (path === '/login') return <LoginPage onLogin={handleLogin} />;
+    if (Capacitor.isNativePlatform()) return <LoginPage onLogin={handleLogin} />;
     return <LandingPage />;
   }
 
@@ -215,6 +217,67 @@ function AppMain({ authUser, onLogout }){
   const [rooms, setRooms] = useState([]);
   const [searchQ, setSearchQ] = useState('');
   const [editProfile, setEditProfile] = useState(false);
+  const [netOnline, setNetOnline] = useState(navigator.onLine);
+  const [syncPending, setSyncPending] = useState(0);
+  useEffect(() => {
+    const onOn = () => setNetOnline(true);
+    const onOff = () => setNetOnline(false);
+    window.addEventListener('online', onOn);
+    window.addEventListener('offline', onOff);
+    return () => { window.removeEventListener('online', onOn); window.removeEventListener('offline', onOff); };
+  }, []);
+  // sync queue 처리: 온라인 복귀 시 대기 항목 자동 업로드
+  useEffect(() => {
+    const check = () => pendingSyncCount().then(n => setSyncPending(n)).catch(() => {});
+    check();
+    const iv = setInterval(check, 5000);
+
+    const processSyncQueue = async () => {
+      try {
+        const queue = await getSyncQueue();
+        if (!queue || queue.length === 0) return;
+        for (const item of queue) {
+          try {
+            if (item.type === 'insert') {
+              await sbPost(item.table.replace('goroom_', ''), item.data);
+            } else if (item.type === 'update') {
+              await sbPatch(`/${item.table}?id=eq.${item.id}`, item.data);
+            } else if (item.type === 'delete') {
+              await sbDelete(`/${item.table}?id=eq.${item.id}`);
+            }
+            await removeSyncItem(item.queueId);
+            // IndexedDB에서 _synced 플래그 갱신
+            if (item.data?.id) {
+              const store = item.table.replace('goroom_', '');
+              putOne(store, { ...item.data, _synced: true }).catch(() => {});
+            }
+          } catch (e) {
+            console.warn('[sync] Failed to sync item:', item.queueId, e);
+            // 재시도 횟수 초과 시 제거
+            if ((item.retries || 0) >= 3) {
+              await removeSyncItem(item.queueId).catch(() => {});
+            }
+          }
+        }
+        check();
+        try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
+      } catch (e) { console.warn('[sync] processSyncQueue error:', e); }
+    };
+
+    const onOnline = () => { setTimeout(processSyncQueue, 1000); };
+    window.addEventListener('online', onOnline);
+    // 앱 시작 시 온라인이면 즉시 처리
+    if (navigator.onLine) setTimeout(processSyncQueue, 2000);
+
+    return () => { clearInterval(iv); window.removeEventListener('online', onOnline); };
+  }, []);
+
+  const [showAppBanner, setShowAppBanner] = useState(() => {
+    if (Capacitor.isNativePlatform()) return false;
+    const dismissed = localStorage.getItem('gr_app_banner_dismissed');
+    if (dismissed && Date.now() - Number(dismissed) < 7 * 86400000) return false;
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  });
   const [schDetail, setSchDetail] = useState(null);
   const [friendSchs, setFriendSchs] = useState({});  // { friendId: schedules[] }
   const [profilePopup, setProfilePopup] = useState(null); // {id,nickname,statusMsg,profileImg,profileBg}
@@ -455,6 +518,8 @@ function AppMain({ authUser, onLogout }){
             loadedRooms.unshift({ id: roomId, name: '내 캘린더', desc: '개인 일정', isPersonal: true, isPublic: true, members: [{id:userId,role:'owner'}], newCount: 0, nearestSchedule: null, menus: {cal:true,memo:true,todo:true,diary:true,budget:true,alarm:true}, settings: { ...DEF_SETTINGS }, schedules: [], memos: [], todos: [], diaries: [] });
           }
           setRooms(loadedRooms);
+          // 백그라운드 캐시 스냅샷 저장 (실패해도 무시)
+          setTimeout(() => { setMe(curMe => { setFriends(curFr => { cacheSnapshot({ me: curMe, friends: curFr, rooms: loadedRooms }).catch(() => {}); return curFr; }); return curMe; }); }, 100);
         } else {
           // 방이 없으면 내 캘린더 생성
           const roomId = uid();
@@ -466,6 +531,18 @@ function AppMain({ authUser, onLogout }){
         }
       } catch (e) {
         console.error('Load error:', e);
+        // 오프라인 폴백: 서버 로드 실패 시 IndexedDB 캐시에서 복원
+        if (!navigator.onLine) {
+          try {
+            const cached = await loadCachedFallback();
+            if (cached) {
+              setMe(prev => ({ ...prev, ...cached.me }));
+              setFriends(cached.friends || []);
+              setRooms(cached.rooms || []);
+              console.log('[offline] Loaded cached data from', new Date(cached.lastSync).toLocaleString());
+            }
+          } catch (ce) { console.warn('[offline] Cache load failed:', ce); }
+        }
       } finally {
         clearTimeout(loadTimeout); setLoading(false);
         // 네이티브 앱: 위젯에 세션 전달 + 갱신
@@ -765,9 +842,17 @@ function AppMain({ authUser, onLogout }){
       todos: sch.todos || [], images: existingOnly,
     };
     try {
+      if (!navigator.onLine) throw new Error('offline');
       await sbPost('goroom_schedules', row);
       try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
-    } catch (e) { console.error('saveSchedule error:', e); }
+      // 온라인 저장 성공 → IndexedDB 스냅샷 갱신
+      putOne('schedules', { ...row, _synced: true }).catch(() => {});
+    } catch (e) {
+      console.warn('saveSchedule offline/error:', e.message);
+      // 오프라인 또는 실패 → IndexedDB에 저장 + sync queue 추가
+      putOne('schedules', { ...row, _synced: false }).catch(() => {});
+      addToSyncQueue({ type: 'insert', table: 'goroom_schedules', data: row }).catch(() => {});
+    }
 
     const hasNewFiles = pendingImages.some(p => p.file || p.dataUrl);
     if (hasNewFiles) {
@@ -822,9 +907,15 @@ function AppMain({ authUser, onLogout }){
       row.images = existingOnly;
     }
     try {
+      if (!navigator.onLine) throw new Error('offline');
       await sbPatch(`/goroom_schedules?id=eq.${sch.id}`, row);
       try { if (Capacitor.isNativePlatform()) GoRoomWidget.refreshWidget().catch(()=>{}); } catch {}
-    } catch (e) { console.error('updateSchedule error:', e); }
+      putOne('schedules', { ...row, id: sch.id, room_id: roomId, _synced: true }).catch(() => {});
+    } catch (e) {
+      console.warn('updateSchedule offline/error:', e.message);
+      putOne('schedules', { ...row, id: sch.id, room_id: roomId, _synced: false }).catch(() => {});
+      addToSyncQueue({ type: 'update', table: 'goroom_schedules', id: sch.id, data: row }).catch(() => {});
+    }
 
     if (hasNewFiles.length > 0 && !isUploading) {
       startBackgroundUpload(sch.id, roomId, pendingImages, uploadFile,
@@ -864,12 +955,16 @@ function AppMain({ authUser, onLogout }){
   };
 
   const saveMemo = async (roomId, memo) => {
+    const row = { id: memo.id, room_id: roomId, created_by: userId, title: memo.title, content: memo.content, pinned: memo.pinned || false };
     try {
-      await sbPost('goroom_memos', {
-        id: memo.id, room_id: roomId, created_by: userId,
-        title: memo.title, content: memo.content, pinned: memo.pinned || false,
-      });
-    } catch (e) { console.error('saveMemo error:', e); }
+      if (!navigator.onLine) throw new Error('offline');
+      await sbPost('goroom_memos', row);
+      putOne('memos', { ...row, _synced: true }).catch(() => {});
+    } catch (e) {
+      console.warn('saveMemo offline/error:', e.message);
+      putOne('memos', { ...row, _synced: false }).catch(() => {});
+      addToSyncQueue({ type: 'insert', table: 'goroom_memos', data: row }).catch(() => {});
+    }
   };
 
   const deleteMemo = async (memoId) => {
@@ -881,12 +976,16 @@ function AppMain({ authUser, onLogout }){
   };
 
   const saveTodo = async (roomId, todo) => {
+    const row = { id: todo.id, room_id: roomId, created_by: userId, text: todo.text, done: false };
     try {
-      await sbPost('goroom_todos', {
-        id: todo.id, room_id: roomId, created_by: userId,
-        text: todo.text, done: false,
-      });
-    } catch (e) { console.error('saveTodo error:', e); }
+      if (!navigator.onLine) throw new Error('offline');
+      await sbPost('goroom_todos', row);
+      putOne('todos', { ...row, _synced: true }).catch(() => {});
+    } catch (e) {
+      console.warn('saveTodo offline/error:', e.message);
+      putOne('todos', { ...row, _synced: false }).catch(() => {});
+      addToSyncQueue({ type: 'insert', table: 'goroom_todos', data: row }).catch(() => {});
+    }
   };
 
   const deleteTodo = async (todoId) => {
@@ -1318,6 +1417,8 @@ function AppMain({ authUser, onLogout }){
   };
 
   const detail = renderDetail();
-  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}<div className="gr-layout-wide">{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
-  return (<AppProvider value={appCtx}><div className="gr-root">{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}{detail || renderSidebar()}</div></AppProvider>);
+  const offlineBar = !netOnline && <div className="gr-offline-bar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg> 오프라인</div>;
+  const syncBar = syncPending > 0 && netOnline === false && <div className="gr-sync-banner">네트워크 접속 시 {syncPending}건의 데이터가 서버에 자동 업로드됩니다</div>;
+  if (isWide) return (<AppProvider value={appCtx}><div className="gr-root">{offlineBar}{syncBar}{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}<div className="gr-layout-wide" style={!netOnline?{top:syncPending>0?56:28}:{}}>{renderSidebar()}<div className="gr-main">{detail || <div className="gr-empty-main"><I n="cal" size={48} color="var(--gr-t3)"/><div style={{marginTop:12,fontSize:16,color:'var(--gr-t3)'}}>캘린더 또는 친구를 선택하세요</div></div>}</div></div></div></AppProvider>);
+  return (<AppProvider value={appCtx}><div className="gr-root">{offlineBar}{syncBar}{joinModal&&<JoinModal/>}{profilePopup&&<ProfilePopup/>}{detail || renderSidebar()}{showAppBanner&&<div className="gr-app-dl-banner"><div style={{display:'flex',alignItems:'center',gap:10,flex:1}}><img src="/icon-192.png" alt="" style={{width:36,height:36,borderRadius:8}}/><div><div style={{fontWeight:700,fontSize:13}}>고룸 앱으로 더 편하게!</div><div style={{fontSize:11,color:'rgba(255,255,255,.7)',marginTop:2}}>푸시 알림, 위젯 지원</div></div></div><a href="https://play.google.com/store/apps/details?id=com.goroom.app" target="_blank" rel="noopener" className="gr-app-dl-btn">받기</a><button className="gr-app-dl-close" onClick={()=>{setShowAppBanner(false);localStorage.setItem('gr_app_banner_dismissed',String(Date.now()));}}>✕</button></div>}</div></AppProvider>);
 }

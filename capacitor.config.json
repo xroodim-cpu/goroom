@@ -3,6 +3,7 @@
   "appName": "고룸",
   "webDir": "dist",
   "server": {
+    "url": "https://goroom.kr",
     "androidScheme": "https"
   },
   "android": {
