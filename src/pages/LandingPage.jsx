@@ -245,7 +245,7 @@ export default function LandingPage() {
 <section className="dl" id="dl"><div className="w">
 <div className="lbl w" data-a="u">🌐 멀티 플랫폼</div><h2 className="ttl" data-a="u">언제 어디서나,<br />끊김 없는 나의 시간</h2><p className="sub ct" data-a="u" style={{color:'rgba(255,255,255,.5)',marginTop:'14px'}}>안드로이드, 윈도우, 웹. 완벽 동기화.</p>
 <div className="gd">
-  <a href="#" className="dca" data-a="u"><div className="di">📱</div><div className="dn">Android</div><div className="ds">Google Play</div><div className="db">다운로드 →</div></a>
+  <a href="https://play.google.com/store/apps/details?id=com.goroom.app" target="_blank" rel="noopener" className="dca" data-a="u"><div className="di">📱</div><div className="dn">Android</div><div className="ds">Google Play</div><div className="db">다운로드 →</div></a>
   <a href="https://s3.ap-northeast-2.wasabisys.com/goroom/release/GoRoom-Setup-2.0.0.exe" className="dca" data-a="u"><div className="di">🖥️</div><div className="dn">Windows PC</div><div className="ds">Windows 10+</div><div className="db">다운로드 →</div></a>
   <a href="#" className="dca" data-a="u" onClick={(e) => { e.preventDefault(); navigate('/login'); }}><div className="di">🌐</div><div className="dn">Web App</div><div className="ds">브라우저에서 시작</div><div className="db">바로 시작 →</div></a>
 </div></div></section>
