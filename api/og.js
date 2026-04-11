@@ -18,24 +18,31 @@ export default async function handler(req, res) {
   const protocol = req.headers['x-forwarded-proto'] || 'https';
   const baseUrl = `${protocol}://${host}`;
 
-  let title = '고룸 GoRoom';
+  let title = '고룸 GOROOM';
   let description = '시간을 다양하게 담아내고, 서로의 시간을 공유해보세요.';
   let image = `${baseUrl}/og-default.jpg`;
   let url = baseUrl;
 
   try {
     let room = null;
+    let user = null;
 
     if (slug) {
-      // /@slug로 접근
-      const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&slug=eq.${slug}`);
+      // 1) 먼저 방(room) slug으로 조회
+      const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&slug=eq.${encodeURIComponent(slug)}`);
       room = rooms?.[0];
+
+      // 2) 방이 없으면 유저 link_code로 조회 (프로필 공유)
+      if (!room) {
+        const users = await apiFetch(`/goroom_users?select=id,nickname,status_msg,profile_img,link_code&link_code=eq.${encodeURIComponent(slug)}`);
+        user = users?.[0];
+      }
+
       url = `${baseUrl}/@${slug}`;
     } else if (roomId) {
       // /calendar/:roomId로 접근
       const rooms = await apiFetch(`/goroom_rooms?select=id,name,description,thumbnail_url,slug&id=eq.${roomId}`);
       room = rooms?.[0];
-      // slug가 있으면 slug URL 사용, 없으면 calendar URL
       url = room?.slug ? `${baseUrl}/@${room.slug}` : `${baseUrl}/calendar/${roomId}/cal`;
     }
 
@@ -43,6 +50,10 @@ export default async function handler(req, res) {
       title = `고룸 - ${room.name} 캘린더`;
       description = room.description || `${room.name} 캘린더에 참여하세요!`;
       if (room.thumbnail_url) image = room.thumbnail_url;
+    } else if (user) {
+      title = `고룸 - ${user.nickname}`;
+      description = user.status_msg || `${user.nickname}의 프로필`;
+      if (user.profile_img) image = user.profile_img;
     }
   } catch (e) {
     console.error('[OG] Supabase fetch error:', {
@@ -60,7 +71,7 @@ export default async function handler(req, res) {
     <meta property="og:description" content="${esc(description)}"/>
     <meta property="og:image" content="${esc(image)}"/>
     <meta property="og:url" content="${esc(url)}"/>
-    <meta property="og:site_name" content="고룸 GoRoom"/>
+    <meta property="og:site_name" content="고룸 GOROOM"/>
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="${esc(title)}"/>
     <meta name="twitter:description" content="${esc(description)}"/>
