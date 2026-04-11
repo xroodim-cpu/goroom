@@ -34,7 +34,7 @@ export default function CalRoom({room,goBack,roomTab,setRoomTab,friends,subPage,
 
   const handleShareRoom = async () => {
     if (!room.slug) { alert('공유 링크를 만들려면 먼저 캘린더 설정에서 주소를 지정하세요.'); return; }
-    const url = `${window.location.origin}/@${room.slug}`;
+    const url = `${window.location.origin}/calendar/${room.slug}`;
     if (navigator.share) {
       try { await navigator.share({ title: `고룸 - ${room.name}`, url }); return; } catch {}
     }
