@@ -105,11 +105,7 @@ function AppInner() {
         try { localStorage.setItem('goroom_join_code', joinCode); } catch(e) {}
         window.history.replaceState(null, '', window.location.pathname);
       }
-      // /@slug 캘린더 공유 링크 감지
-      const slugMatch = window.location.pathname.match(/^\/@(.+)$/);
-      if (slugMatch) {
-        try { localStorage.setItem('goroom_join_slug', slugMatch[1]); } catch(e) {}
-      }
+      // /@slug 유저 프로필 링크 — localStorage 불필요 (클라이언트에서 직접 처리)
       // OAuth 리다이렉트 후 원래 경로 복원용
       const fullPath = window.location.pathname + window.location.search;
       if (fullPath !== '/' && fullPath !== '/login' && fullPath !== '/privacy' && fullPath !== '/terms' && !window.location.hash.includes('access_token')) {
@@ -164,6 +160,44 @@ function AppInner() {
   if (location.pathname === '/terms') return <TermsOfService />;
 
   return <AppMain authUser={user} onLogout={handleLogout}/>;
+}
+
+/* ── 유저 프로필 공유 페이지 (@slug) ── */
+function UserProfileSlug({ userSlug, userId, friends, navigate, goBack, sb }) {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        const users = await sbGet(`/goroom_users?select=id,nickname,status_msg,profile_img,profile_bg,link_code&link_code=eq.${encodeURIComponent(userSlug)}`);
+        setProfile(users?.[0] || null);
+      } catch { setProfile(null); }
+      setLoading(false);
+    })();
+  }, [userSlug]);
+
+  if (loading) return <div className="gr-panel" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%'}}><div className="gr-loading-spinner"/></div>;
+  if (!profile) return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">프로필</div><div style={{width:28}}/></div><div style={{padding:40,textAlign:'center',color:'var(--gr-t3)',fontSize:14}}>존재하지 않는 프로필입니다</div></div>;
+
+  const isSelf = profile.id === userId;
+  const isFriend = friends.some(f => f.id === profile.id);
+
+  return <div className="gr-panel">
+    <div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">{profile.nickname}</div><div style={{width:28}}/></div>
+    <div style={{padding:20,textAlign:'center'}}>
+      {profile.profile_bg && <div style={{height:120,borderRadius:12,overflow:'hidden',marginBottom:-40}}><img src={profile.profile_bg} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/></div>}
+      <div style={{position:'relative',zIndex:2}}>
+        <Avatar name={profile.nickname} size={80} src={profile.profile_img}/>
+      </div>
+      <div style={{fontSize:18,fontWeight:700,marginTop:8}}>{profile.nickname}</div>
+      {profile.status_msg && <div style={{fontSize:13,color:'var(--gr-t3)',marginTop:4}}>{profile.status_msg}</div>}
+      <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:16}}>
+        {isSelf && <button className="gr-btn-sm-outline" onClick={()=>navigate('/profile')}>내 프로필</button>}
+        {!isSelf && !isFriend && <button className="gr-btn-sm" onClick={()=>navigate('/more/add-friend')}>친구 추가</button>}
+        {!isSelf && isFriend && <button className="gr-btn-sm-outline" onClick={()=>navigate(`/friends/${profile.id}`)}>프로필 보기</button>}
+      </div>
+    </div>
+  </div>;
 }
 
 function AppMain({ authUser, onLogout }){
@@ -286,9 +320,9 @@ function AppMain({ authUser, onLogout }){
     if (path === '/payment/success') return { page: 'payment-success' };
     if (path === '/payment/fail') return { page: 'payment-fail' };
     if (path === '/billing/start') return { page: 'billing-start' };
-    // /@slug 캘린더 공유 링크
+    // /@slug 유저 프로필 공유 링크
     const slugMatch = path.match(/^\/@(.+)$/);
-    if (slugMatch) return { page: 'join-slug', slug: slugMatch[1] };
+    if (slugMatch) return { page: 'user-profile-slug', userSlug: slugMatch[1] };
     return { page: null, selectedId: null };
   };
   const nav = deriveNav();
@@ -379,7 +413,7 @@ function AppMain({ authUser, onLogout }){
         if (friendRows.length > 0) {
           const friendUsers = secondaryResults[0] || [];
           const fm = {}; friendUsers.forEach(u => { fm[u.id] = u; });
-          setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id, createdAt: new Date(fr.created_at||Date.now()).getTime(), linkCode: u.link_code||'' }; }));
+          setFriends(friendRows.map(fr => { const u = fm[fr.friend_id]||{}; return { id: fr.friend_id, nickname: u.nickname||'?', statusMsg: u.status_msg||'', isPublic: true, birthday: u.birthday||'', favorite: fr.favorite||false, bio: '', profileImg: u.profile_img||null, profileBg: u.profile_bg||null, updatedAt: null, _friendRowId: fr.id, createdAt: new Date(fr.created_at||Date.now()).getTime() }; }));
         }
         // 친구추천 처리 (나를 추가했지만 내가 추가하지 않은 사람)
         const myFriendIds = new Set(friendRows.map(fr => fr.friend_id));
@@ -460,13 +494,15 @@ function AppMain({ authUser, onLogout }){
         else try { joinCode = localStorage.getItem('goroom_join_code'); } catch(e) {}
         try { localStorage.removeItem('goroom_join_code'); } catch(e) {}
 
-        // 2) /@slug 확인
-        let joinSlug = null;
-        try { joinSlug = localStorage.getItem('goroom_join_slug'); } catch(e) {}
-        try { localStorage.removeItem('goroom_join_slug'); } catch(e) {}
-        // 현재 URL이 /@slug인 경우도 확인
+        // 2) /@slug → 유저 프로필로 리다이렉트
         const slugFromPath = window.location.pathname.match(/^\/@(.+)$/);
-        if (slugFromPath) joinSlug = slugFromPath[1];
+        if (slugFromPath) {
+          // 유저 프로필 페이지이므로 join 플로우 스킵 (렌더에서 처리)
+          return;
+        }
+        // 기존 localStorage slug 정리 (deprecated)
+        try { localStorage.removeItem('goroom_join_slug'); } catch(e) {}
+        let joinSlug = null;
 
         // 3) 리다이렉트 경로 복원
         let redirectPath = null;
@@ -1129,7 +1165,7 @@ function AppMain({ authUser, onLogout }){
           {sb&&<button className="gr-icon-btn" onClick={goBack} style={{position:'absolute',top:12,left:12,color:'#fff',zIndex:3}}><I n="back" size={20}/></button>}
           <div className="gr-profile-top-bar">
             {editProfile && <label className="gr-profile-top-btn-s"><I n="camera" size={16} color="#333"/> 배경<input type="file" accept="image/*" onChange={e=>handleImg(e,'profileBg')} style={{display:'none'}}/></label>}
-            {editProfile ? <button className="gr-profile-top-btn" onClick={handleDone}>완료</button> : <button className="gr-profile-top-btn" onClick={()=>setEditProfile(true)}>프로필 편집</button>}
+            {editProfile ? <button className="gr-profile-top-btn" onClick={handleDone}>완료</button> : <><button className="gr-profile-top-btn" onClick={()=>setEditProfile(true)}>프로필 편집</button>{me.linkCode&&<button className="gr-profile-top-btn" onClick={()=>{const url=`https://goroom.kr/@${me.linkCode}`;if(navigator.share)navigator.share({title:`고룸 - ${me.nickname}`,url}).catch(()=>{});else{navigator.clipboard.writeText(url);alert('프로필 링크가 복사되었습니다');}}}><I n="share" size={14}/></button>}</>}
           </div>
         </div>
         <div className="gr-profile-info">
@@ -1192,11 +1228,11 @@ function AppMain({ authUser, onLogout }){
     if(page==='trash') return <TrashPage goBack={goBack} sb={sb} userId={userId} rooms={rooms} setRooms={setRooms} updateRoom={updateRoom}/>;
     if(page==='storage') return <StoragePage goBack={goBack} rooms={rooms} userId={userId} me={me}/>;
 
-    // /@slug 공유링크 — join useEffect에서 처리하므로 로딩만 표시
-    if(page==='join-slug') return <div className="gr-panel" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%'}}><div className="gr-loading-spinner"/></div>;
+    // /@slug 유저 프로필 공유 링크
+    if(page==='user-profile-slug') return <UserProfileSlug userSlug={nav.userSlug} userId={userId} friends={friends} navigate={navigate} goBack={goBack} sb={sb}/>;
 
     if(page==='room'){
-      const room=rooms.find(r=>r.id===selectedId);
+      const room=rooms.find(r=>r.id===selectedId) || rooms.find(r=>r.slug===selectedId);
       if(!room) return <JoinRoomPrompt roomId={selectedId} userId={userId} joinRoom={joinRoom} goBack={goBack} sb={sb}/>;
       return <CalRoom room={room} goBack={goBack} roomTab={roomTab} setRoomTab={setRoomTab} friends={friends} subPage={subPage} setSubPage={setSubPage} updateRoom={updateRoom} sb={sb} me={me} userId={userId} onSchClick={(s)=>{setSchDetail(s);navigate('/schedule-detail');}} saveSchedule={saveSchedule} saveMemo={saveMemo} deleteMemo={deleteMemo} updateMemoPin={updateMemoPin} saveTodo={saveTodo} deleteTodo={deleteTodo} updateTodoDone={updateTodoDone} updateDiaryLikes={updateDiaryLikes} updateDiaryComments={updateDiaryComments} updateRoomInDb={updateRoomInDb} deleteSchedule={deleteSchedule} deleteRoom={deleteRoom} getName={getName} getProfile={getProfile} rooms={rooms}/>;
     }
@@ -1224,7 +1260,7 @@ function AppMain({ authUser, onLogout }){
               {updatedF.length>0&&!q&&<div><div className="gr-section-label">업데이트한 친구 {updatedF.length}</div>{updatedF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               {favF.length>0&&<div><div className="gr-section-label">⭐ 즐겨찾는 친구 {favF.length}</div>{favF.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><Avatar name={f.nickname} size={44} src={f.profileImg}/><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}</div>}
               <div className="gr-section-label">친구 {filtered.length}</div>
-              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><div className="gr-avatar-wrap">{f.updatedAt&&(Date.now()-f.updatedAt)<86400000&&<span className="gr-new-dot"/>}<Avatar name={f.nickname} size={44} src={f.profileImg}/></div><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#cc222c"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div>{f.linkCode&&<button className="gr-friend-share-btn" onClick={e=>{e.stopPropagation();const url=`https://goroom.kr/@${f.linkCode}`;if(navigator.share)navigator.share({title:`고룸 - ${f.nickname}`,url}).catch(()=>{});else{navigator.clipboard.writeText(url);alert('링크가 복사되었습니다');}}}><I n="share" size={14} color="var(--gr-t3)"/></button>}</div>)}
+              {filtered.map(f=> <div key={f.id} className={`gr-friend-row ${selectedId===f.id?'active':''}`} onClick={()=>openProfile(f.id)}><div className="gr-avatar-wrap">{f.updatedAt&&(Date.now()-f.updatedAt)<86400000&&<span className="gr-new-dot"/>}<Avatar name={f.nickname} size={44} src={f.profileImg}/></div><div className="gr-friend-info"><div className="gr-friend-name">{f.nickname} {f.favorite&&<I n="starFill" size={11} color="#cc222c"/>}{!f.isPublic&&<I n="lock" size={11} color="var(--gr-t3)"/>}</div><div className="gr-friend-status">{f.statusMsg}</div></div></div>)}
             </div>;
           })()}
         </div></>}

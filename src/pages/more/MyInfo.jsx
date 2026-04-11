@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { supabase } from '../../supabase';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, sbGet, sbPatch } from '../../supabase';
 import I from '../../components/shared/Icon';
 
 export default function MyInfoPage({goBack, sb, me, setMe, saveProfile, authUser}) {
@@ -15,6 +15,45 @@ export default function MyInfoPage({goBack, sb, me, setMe, saveProfile, authUser
   const [pwLoading, setPwLoading] = useState(false);
 
   const [snsMsg, setSnsMsg] = useState('');
+
+  // 프로필 ID 편집
+  const [profileId, setProfileId] = useState(me.linkCode || '');
+  const [profileIdStatus, setProfileIdStatus] = useState(''); // '' | 'checking' | 'available' | 'taken' | 'error' | 'short'
+  const [profileIdSaving, setProfileIdSaving] = useState(false);
+  const debounceRef = useRef(null);
+  const originalId = me.linkCode || '';
+
+  const handleProfileIdChange = (val) => {
+    const v = val.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    setProfileId(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (v === originalId) { setProfileIdStatus(''); return; }
+    if (v.length < 2) { setProfileIdStatus('short'); return; }
+    setProfileIdStatus('checking');
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const existing = await sbGet(`/goroom_users?select=id&link_code=eq.${encodeURIComponent(v)}&id=neq.${me.id}`);
+        setProfileIdStatus(existing?.length > 0 ? 'taken' : 'available');
+      } catch { setProfileIdStatus('error'); }
+    }, 500);
+  };
+
+  const handleSaveProfileId = async () => {
+    if (profileIdStatus !== 'available' || profileId.length < 2) return;
+    setProfileIdSaving(true);
+    try {
+      await sbPatch(`/goroom_users?id=eq.${me.id}`, { link_code: profileId });
+      setMe(prev => ({ ...prev, linkCode: profileId }));
+      setProfileIdStatus('');
+    } catch { setProfileIdStatus('error'); }
+    setProfileIdSaving(false);
+  };
+
+  const handleShareProfile = () => {
+    const url = `https://goroom.kr/@${me.linkCode}`;
+    if (navigator.share) navigator.share({ title: `고룸 - ${me.nickname}`, url }).catch(() => {});
+    else { navigator.clipboard.writeText(url); alert('프로필 링크가 복사되었습니다'); }
+  };
 
   const saveBirthday = async () => {
     setSavingBday(true);
@@ -61,9 +100,32 @@ export default function MyInfoPage({goBack, sb, me, setMe, saveProfile, authUser
           <span className="gr-myinfo-label"><I n="user" size={14} color="var(--gr-t3)"/> 닉네임</span>
           <span className="gr-myinfo-val">{me.nickname}</span>
         </div>
-        <div className="gr-myinfo-row">
-          <span className="gr-myinfo-label"><I n="link" size={14} color="var(--gr-t3)"/> 친구 코드</span>
-          <span className="gr-myinfo-val" style={{fontSize:12}}>{me.linkCode}</span>
+      </div>
+
+      {/* 프로필 ID */}
+      <div className="gr-pg-label" style={{marginTop:20}}>프로필 공유</div>
+      <div className="gr-myinfo-card">
+        <div style={{marginBottom:8}}>
+          <div style={{fontSize:12,color:'var(--gr-t3)',marginBottom:6}}>프로필 ID를 설정하면 goroom.kr/@ID 로 프로필을 공유할 수 있습니다.</div>
+          <div className="gr-slug-input-wrap">
+            <span className="gr-slug-prefix">goroom.kr/@</span>
+            <input
+              className="gr-input gr-slug-input"
+              value={profileId}
+              onChange={e => handleProfileIdChange(e.target.value)}
+              placeholder="my-profile-id"
+              style={{fontSize:13}}
+            />
+          </div>
+          {profileIdStatus === 'checking' && <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>확인 중...</div>}
+          {profileIdStatus === 'available' && <div style={{fontSize:11,color:'#22c55e',marginTop:4}}>✓ 사용 가능</div>}
+          {profileIdStatus === 'taken' && <div style={{fontSize:11,color:'var(--gr-acc)',marginTop:4}}>이미 사용 중인 ID입니다</div>}
+          {profileIdStatus === 'short' && <div style={{fontSize:11,color:'var(--gr-t3)',marginTop:4}}>2글자 이상 입력하세요</div>}
+          {profileIdStatus === 'error' && <div style={{fontSize:11,color:'var(--gr-acc)',marginTop:4}}>확인 실패. 다시 시도해주세요.</div>}
+          <div style={{display:'flex',gap:6,marginTop:8}}>
+            {profileIdStatus === 'available' && <button className="gr-btn-sm" onClick={handleSaveProfileId} disabled={profileIdSaving}>{profileIdSaving ? '저장 중...' : '저장'}</button>}
+            {me.linkCode && <button className="gr-btn-sm-outline" onClick={handleShareProfile}><I n="share" size={12}/> 공유</button>}
+          </div>
         </div>
       </div>
 

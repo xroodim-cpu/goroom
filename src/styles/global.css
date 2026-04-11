@@ -48,7 +48,6 @@
 .gr-alarm-content{flex:1;min-width:0}.gr-alarm-title{font-size:13px;line-height:1.5;color:var(--gr-text)}.gr-alarm-title strong{font-weight:600}.gr-alarm-sub{font-size:11px;color:var(--gr-t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gr-friend-me{display:flex;align-items:center;gap:14px;padding:14px 20px;cursor:pointer}.gr-friend-me:active{background:var(--gr-bg2)}
 .gr-friend-row{display:flex;align-items:center;gap:14px;padding:10px 20px;cursor:pointer;transition:background var(--gr-tr)}.gr-friend-row:active,.gr-friend-row:hover{background:var(--gr-bg2)}.gr-friend-row.active{background:var(--gr-bg2)}
-.gr-friend-share-btn{flex-shrink:0;width:28px;height:28px;border:none;background:transparent;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s}.gr-friend-share-btn:hover{background:var(--gr-bg2)}
 .gr-friend-info{flex:1;min-width:0}.gr-friend-name{font-size:15px;font-weight:600;display:flex;align-items:center;gap:4px}.gr-friend-status{font-size:12px;color:var(--gr-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gr-divider-line{height:1px;background:var(--gr-brd);margin:8px 20px}.gr-section-label{font-size:12px;color:var(--gr-t3);padding:12px 20px 4px;font-weight:500}
 .gr-suggest-scroll{display:flex;gap:12px;padding:8px 20px 12px;overflow-x:auto;scrollbar-width:none}.gr-suggest-scroll::-webkit-scrollbar{display:none}

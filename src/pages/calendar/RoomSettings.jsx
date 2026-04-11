@@ -203,7 +203,7 @@ export default function RoomSettings({room,updateRoom,friends,memberList,sb,goBa
           <div className="gr-field">
             <label>캘린더 주소 (영문)</label>
             <div className="gr-slug-input-wrap">
-              <span className="gr-slug-prefix">goroom.kr/@</span>
+              <span className="gr-slug-prefix">goroom.kr/calendar/</span>
               <input
                 className="gr-input gr-slug-input"
                 value={slug}

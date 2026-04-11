@@ -13,10 +13,13 @@ export default function JoinRoomPrompt({ roomId, userId, joinRoom, goBack, sb })
   useEffect(() => {
     (async () => {
       try {
-        const arr = await sbGet(`/goroom_rooms?select=id,name,description,is_public,invite_password,thumbnail_url&id=eq.${roomId}`);
+        // UUID면 id로, 아니면 slug로 조회
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId);
+        const query = isUUID ? `id=eq.${roomId}` : `slug=eq.${encodeURIComponent(roomId)}`;
+        const arr = await sbGet(`/goroom_rooms?select=id,name,description,is_public,invite_password,thumbnail_url&${query}`);
         const r = arr?.[0];
         if (r) {
-          const members = await sbGet(`/goroom_room_members?select=user_id&room_id=eq.${roomId}`);
+          const members = await sbGet(`/goroom_room_members?select=user_id&room_id=eq.${r.id}`);
           setRoom({ ...r, memberCount: members?.length || 0 });
         }
       } catch (e) {

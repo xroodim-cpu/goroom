@@ -8,9 +8,9 @@
     }
   },
   "rewrites": [
-    { "source": "/@:slug", "destination": "/api/og?slug=:slug" },
-    { "source": "/calendar/:roomId/:tab", "destination": "/api/og?roomId=:roomId" },
-    { "source": "/calendar/:roomId", "destination": "/api/og?roomId=:roomId" },
+    { "source": "/@:slug", "destination": "/api/og?userSlug=:slug" },
+    { "source": "/calendar/:slug/:tab", "destination": "/api/og?calSlug=:slug" },
+    { "source": "/calendar/:slug", "destination": "/api/og?calSlug=:slug" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
