@@ -8,9 +8,9 @@
  */
 
 const DB_NAME = 'goroom_offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-const STORES = ['users', 'friends', 'rooms', 'schedules', 'memos', 'todos', 'diaries', 'sync_queue', 'meta'];
+const STORES = ['users', 'friends', 'rooms', 'schedules', 'memos', 'todos', 'diaries', 'sync_queue', 'upload_queue', 'file_cache', 'meta'];
 
 let _db = null;
 
@@ -22,10 +22,12 @@ function openDB() {
       const db = e.target.result;
       STORES.forEach(name => {
         if (!db.objectStoreNames.contains(name)) {
-          if (name === 'sync_queue') {
+          if (name === 'sync_queue' || name === 'upload_queue') {
             db.createObjectStore(name, { keyPath: 'queueId', autoIncrement: true });
           } else if (name === 'meta') {
             db.createObjectStore(name);
+          } else if (name === 'file_cache') {
+            db.createObjectStore(name, { keyPath: 'cacheKey' });
           } else {
             const store = db.createObjectStore(name, { keyPath: 'id' });
             if (['schedules', 'memos', 'todos', 'diaries'].includes(name)) {
@@ -213,6 +215,52 @@ export async function loadCachedFallback() {
     console.warn('[offlineStore] loadCachedFallback failed:', e);
     return null;
   }
+}
+
+// ── 업로드 큐 (파일 blob 포함 영속 저장) ──
+
+/**
+ * 업로드 큐에 파일 추가
+ * @param {Object} item - { itemId, roomId, itemType:'schedule'|'diary', index, fileBlob, fileName, fileType, wasabiPath }
+ */
+export async function addToUploadQueue(item) {
+  const store = await tx('upload_queue', 'readwrite');
+  return promisify(store.add({ ...item, createdAt: Date.now(), retries: 0, status: 'pending' }));
+}
+
+export async function getUploadQueue() {
+  return getAll('upload_queue');
+}
+
+export async function removeUploadItem(queueId) {
+  const store = await tx('upload_queue', 'readwrite');
+  return promisify(store.delete(queueId));
+}
+
+export async function updateUploadItem(item) {
+  const store = await tx('upload_queue', 'readwrite');
+  return promisify(store.put(item));
+}
+
+/**
+ * 로컬 파일 캐시 저장 (미리보기용)
+ * @param {string} cacheKey - 고유 키 (itemId + index)
+ * @param {Blob} blob - 파일 blob
+ * @param {string} type - MIME type
+ */
+export async function cacheFile(cacheKey, blob, type) {
+  const store = await tx('file_cache', 'readwrite');
+  return promisify(store.put({ cacheKey, blob, type, cachedAt: Date.now() }));
+}
+
+export async function getCachedFile(cacheKey) {
+  const store = await tx('file_cache');
+  return promisify(store.get(cacheKey));
+}
+
+export async function removeCachedFile(cacheKey) {
+  const store = await tx('file_cache', 'readwrite');
+  return promisify(store.delete(cacheKey));
 }
 
 // ── 유틸 ──

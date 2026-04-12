@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { supabase, sbGet, sbPost, sbPatch, sbDelete } from './supabase';
 import { uploadToWasabi, deleteFromWasabi, deleteFolderFromWasabi, moveInWasabi, getWasabiUrl, extractWasabiPath } from './wasabi';
 import { uid, shortId, fmt, fmtTime, DAYS, MO, COLORS, ALL_MENUS, DEF_SETTINGS, getUserId, fileToBlob, canEdit, canManage, extFromDataUrl, extFromFile, isVideo as isVideoHelper } from './lib/helpers';
-import { startBackgroundUpload, onUploadStateChange, getUploadState } from './lib/uploadManager';
+import { startBackgroundUpload, onUploadStateChange, getUploadState, initUploadManager, processUploadQueue } from './lib/uploadManager';
 import { cacheSnapshot, loadCachedFallback, isOnline as checkOnline, addToSyncQueue, getSyncQueue, removeSyncItem, putOne, deleteOne as idbDelete, pendingSyncCount } from './lib/offlineStore';
 import { Capacitor } from '@capacitor/core';
 import GoRoomWidget from './plugins/GoRoomWidget';
@@ -283,6 +283,10 @@ function AppMain({ authUser, onLogout }){
     if (navigator.onLine) setTimeout(processSyncQueue, 2000);
 
     return () => { clearInterval(iv); window.removeEventListener('online', onOnline); };
+  }, []);
+  // 업로드 매니저 초기화 (네트워크 복구 시 대기 파일 자동 재시도)
+  useEffect(() => {
+    initUploadManager(uploadFile, sbPatch, setRooms);
   }, []);
 
   const [showAppBanner, setShowAppBanner] = useState(() => {
@@ -1056,6 +1060,7 @@ function AppMain({ authUser, onLogout }){
     // 새 파일 → background upload 후 DB 업데이트
     const hasNewFiles = pendingImages.some(p => p.file || p.dataUrl);
     if (hasNewFiles) {
+      pendingImages._itemType = 'diary';
       startBackgroundUpload(diary.id, roomId, pendingImages, uploadFile,
         (diaryId, finalUrls) => {
           sbPatch(`/goroom_diaries?id=eq.${diaryId}`, { images: finalUrls }).catch(e => console.error('diary bg update error:', e));
