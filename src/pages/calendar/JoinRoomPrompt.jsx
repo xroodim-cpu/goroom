@@ -31,7 +31,7 @@ export default function JoinRoomPrompt({ roomId, userId, joinRoom, goBack, sb })
   const handleJoin = async () => {
     if (!room) return;
     if (room.invite_password) {
-      if (pw !== room.invite_password) { setErr('비밀번호가 틀렸습니다.'); return; }
+      if (pw.trim() !== (room.invite_password||'').trim()) { setErr('비밀번호가 틀렸습니다.'); return; }
     }
     setJoining(true);
     try {

@@ -155,6 +155,8 @@ function AppInner() {
     if (path === '/terms') return <TermsOfService />;
     if (path === '/login') return <LoginPage onLogin={handleLogin} />;
     if (Capacitor.isNativePlatform()) return <LoginPage onLogin={handleLogin} />;
+    // 초대 링크(/@slug, /calendar/xxx)로 접속한 비로그인 사용자 → 로그인 페이지
+    if (path.startsWith('/@') || (path.startsWith('/calendar/') && path !== '/calendar')) return <LoginPage onLogin={handleLogin} />;
     return <LandingPage />;
   }
 
@@ -165,9 +167,10 @@ function AppInner() {
 }
 
 /* ── 유저 프로필 공유 페이지 (@slug) ── */
-function UserProfileSlug({ userSlug, userId, friends, navigate, goBack, sb }) {
+function UserProfileSlug({ userSlug, userId, friends, navigate, goBack, sb, addFriendByCode }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     (async () => {
       try {
@@ -177,6 +180,16 @@ function UserProfileSlug({ userSlug, userId, friends, navigate, goBack, sb }) {
       setLoading(false);
     })();
   }, [userSlug]);
+
+  const handleAddFriend = async () => {
+    if (adding || !profile?.link_code) return;
+    setAdding(true);
+    try {
+      await addFriendByCode(profile.link_code);
+      navigate(`/friends/${profile.id}`);
+    } catch { }
+    setAdding(false);
+  };
 
   if (loading) return <div className="gr-panel" style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%'}}><div className="gr-loading-spinner"/></div>;
   if (!profile) return <div className="gr-panel"><div className="gr-pg-top">{sb&&<button className="gr-icon-btn" onClick={goBack}><I n="back" size={20}/></button>}<div className="gr-pg-title">프로필</div><div style={{width:28}}/></div><div style={{padding:40,textAlign:'center',color:'var(--gr-t3)',fontSize:14}}>존재하지 않는 프로필입니다</div></div>;
@@ -195,7 +208,7 @@ function UserProfileSlug({ userSlug, userId, friends, navigate, goBack, sb }) {
       {profile.status_msg && <div style={{fontSize:13,color:'var(--gr-t3)',marginTop:4}}>{profile.status_msg}</div>}
       <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:16}}>
         {isSelf && <button className="gr-btn-sm-outline" onClick={()=>navigate('/profile')}>내 프로필</button>}
-        {!isSelf && !isFriend && <button className="gr-btn-sm" onClick={()=>navigate('/more/add-friend')}>친구 추가</button>}
+        {!isSelf && !isFriend && <button className="gr-btn-sm" onClick={handleAddFriend} disabled={adding}>{adding?'추가 중...':'친구 추가'}</button>}
         {!isSelf && isFriend && <button className="gr-btn-sm-outline" onClick={()=>navigate(`/friends/${profile.id}`)}>프로필 보기</button>}
       </div>
     </div>
@@ -1005,29 +1018,54 @@ function AppMain({ authUser, onLogout }){
   };
 
   const saveDiary = async (roomId, diary) => {
-    const imageUrls = [];
+    const fileMap = diary._fileMap || {};
+    // blob URL(새 파일)과 기존 URL 분리
+    const pendingImages = [];
+    const immediateUrls = [];
     for (let i = 0; i < (diary.images || []).length; i++) {
       const img = diary.images[i];
-      if (img && img.startsWith('data:')) {
-        const blob = await fileToBlob(img);
-        if (blob) {
-          const ext = extFromDataUrl(img);
-          const path = `calendar/${roomId}/diary/${diary.id}/${i}_${Date.now()}.${ext}`;
-          const url = await uploadFile(path, blob);
-          if (url) imageUrls.push(url);
-        }
+      if (img && img.startsWith('blob:') && fileMap[img]) {
+        pendingImages.push({ index: i, file: fileMap[img] });
+        immediateUrls.push(null);
+      } else if (img && img.startsWith('data:')) {
+        pendingImages.push({ index: i, dataUrl: img });
+        immediateUrls.push(null);
       } else if (img) {
-        imageUrls.push(img);
+        pendingImages.push({ index: i, existingUrl: img });
+        immediateUrls.push(img);
       }
     }
+
+    const existingOnly = immediateUrls.filter(u => u);
+    const row = {
+      id: diary.id, room_id: roomId, created_by: userId,
+      content: diary.content || '', mood: diary.mood || null, weather: diary.weather || null,
+      images: existingOnly, likes: [], comments: [],
+      title: diary.title || '',
+    };
     try {
-      await sbPost('goroom_diaries', {
-        id: diary.id, room_id: roomId, created_by: userId,
-        content: diary.content || '', mood: diary.mood || null, weather: diary.weather || null,
-        images: imageUrls, likes: [], comments: [],
-      });
-    } catch (e) { console.error('saveDiary error:', e); }
-    return { ...diary, images: imageUrls };
+      if (!navigator.onLine) throw new Error('offline');
+      await sbPost('goroom_diaries', row);
+      putOne('diaries', { ...row, _synced: true }).catch(() => {});
+    } catch (e) {
+      console.warn('saveDiary offline/error:', e.message);
+      putOne('diaries', { ...row, _synced: false }).catch(() => {});
+      addToSyncQueue({ type: 'insert', table: 'goroom_diaries', data: row }).catch(() => {});
+    }
+
+    // 새 파일 → background upload 후 DB 업데이트
+    const hasNewFiles = pendingImages.some(p => p.file || p.dataUrl);
+    if (hasNewFiles) {
+      startBackgroundUpload(diary.id, roomId, pendingImages, uploadFile,
+        (diaryId, finalUrls) => {
+          sbPatch(`/goroom_diaries?id=eq.${diaryId}`, { images: finalUrls }).catch(e => console.error('diary bg update error:', e));
+          setRooms(prev => prev.map(r => r.id === roomId ? { ...r, diaries: (r.diaries || []).map(d => d.id === diaryId ? { ...d, images: finalUrls } : d) } : r));
+        },
+        extFromDataUrl, fileToBlob
+      );
+    }
+
+    return { ...diary, images: diary.images || [], _fileMap: undefined };
   };
 
   const deleteDiary = async (roomId, diaryId, images, diaryData) => {
@@ -1171,7 +1209,7 @@ function AppMain({ authUser, onLogout }){
       if (j.needPassword) {
         const roomArr = await sbGet(`/goroom_rooms?select=invite_password&id=eq.${j.roomId}`);
         const room = roomArr?.[0];
-        if (!room || room.invite_password !== pw) { setErr('비밀번호가 틀렸습니다.'); return; }
+        if (!room || (room.invite_password||'').trim() !== pw.trim()) { setErr('비밀번호가 틀렸습니다.'); return; }
       }
       setJoining(true);
       try { await joinRoom(j.roomId, j.roomName); setJoinModal(null); }
@@ -1332,7 +1370,7 @@ function AppMain({ authUser, onLogout }){
     if(page==='storage') return <StoragePage goBack={goBack} rooms={rooms} userId={userId} me={me}/>;
 
     // /@slug 유저 프로필 공유 링크
-    if(page==='user-profile-slug') return <UserProfileSlug userSlug={nav.userSlug} userId={userId} friends={friends} navigate={navigate} goBack={goBack} sb={sb}/>;
+    if(page==='user-profile-slug') return <UserProfileSlug userSlug={nav.userSlug} userId={userId} friends={friends} navigate={navigate} goBack={goBack} sb={sb} addFriendByCode={addFriendByCode}/>;
 
     if(page==='room'){
       const room=rooms.find(r=>r.id===selectedId) || rooms.find(r=>r.slug===selectedId);
